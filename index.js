@@ -240,9 +240,6 @@ CASE 2: If the """user_query""" is empty, then follow the following steps:
     console.log('\nExtraction Result:');
     console.log('Extracted Content:', extractedContent);
     console.log('=== Content Extraction Complete ===\n');
-
-
-
     // Add this information to the returned content
     return extractedContent;
   } catch (error) {
@@ -253,10 +250,8 @@ CASE 2: If the """user_query""" is empty, then follow the following steps:
   }
 
 }
+
 let conversationHistory = [];
-
-
-
 
 app.post('/api/chat', async (req, res) => {
   console.log('\n=== New Chat Request ===');
