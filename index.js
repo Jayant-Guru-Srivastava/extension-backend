@@ -58,7 +58,6 @@ app.use(fileUpload()); // Enable file upload middleware
 app.use(cors());
 app.use(express.json());
 
-const jwt = require('jsonwebtoken');
 
 async function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
