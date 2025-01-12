@@ -13,21 +13,48 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id               String         @id @default(uuid())
+  name             String?
+  email            String         @unique
+  password         String
+  isPremium        Boolean        @default(false)
+  paymentTotal     Float          @default(0.0) // Total money paid
+  paymentRemaining Float          @default(0.0) // Remaining money
+  tokenUsage       TokenUsage[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  conversations    Conversation[]
+}
+
+model TokenUsage {
+  id               String @id @default(uuid())
+  userId           String
+  model            String // e.g., "gpt", "claude", etc.
+  inputTokensUsed  Int    @default(0) // Number of input tokens used
+  outputTokensUsed Int    @default(0) // Number of output tokens used
+  inputTokenCost   Float  @default(0.0) // Cost per million input tokens
+  outputTokenCost  Float  @default(0.0) // Cost per million output tokens
+  totalCost        Float  @default(0.0) // Total cost for this model
+  user             User   @relation(fields: [userId], references: [id])
+}
+
 model Conversation {
-    id          String   @id @default(uuid())
-    userId      BigInt
-    createdAt   DateTime @default(now())
-    updatedAt   DateTime @default(now())
-    messages  Message[]
+  id             String    @id @default(uuid())
+  userId         String
+  repositoryName String // e.g., "dub.sh"
+  iteration      Int      // Iteration number
+  createdAt      DateTime  @default(now())
+  user           User      @relation(fields: [userId], references: [id])
+  messages       Message[]
 }
 
 model Message {
-    id            String       @id @default(uuid())
-    conversation   Conversation @relation(fields: [conversationId], references: [id])
-    conversationId String
-    messageId     BigInt
-    userId        BigInt
-    role          String
-    content       String?
-    timestamp     DateTime @default(now())
+  id             String       @id @default(uuid())
+  conversationId String
+  role           String // "user" or "assistant"
+  content        String
+  sequence       Int      // Order within the conversation
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
 }

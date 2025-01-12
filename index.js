@@ -9,14 +9,14 @@ const { marked } = require('marked'); // Import the marked library
 const OpenAI = require("openai");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const Anthropic = require('@anthropic-ai/sdk');
-
+const { PrismaClient } = require('@prisma/client');
+const jwt = require('jsonwebtoken');
 
 // Load environment variables
 dotenv.config();
 
 // Initialize Groq SDK with the API key from the .env file
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
 
 const openai_gemini = new OpenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -52,13 +52,34 @@ const openai_deepseek = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY
 });
 
-
+const prisma = new PrismaClient();
 const app = express();
 app.use(fileUpload()); // Enable file upload middleware
 app.use(cors());
 app.use(express.json());
 
+const jwt = require('jsonwebtoken');
 
+async function authenticate(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET); // Verify token with your secret
+    req.userId = decoded.id; // Attach user ID to the request
+    next(); // Proceed to the next middleware
+  } catch (err) {
+    console.error('Authentication error:', err.message);
+    return res.status(403).json({ error: 'Forbidden: Invalid token' });
+  }
+}
+
+app.use('/api', authenticate); // Apply the authentication middleware to all routes starting with /api
 
 async function call_model1(input_model_1) {
 
@@ -221,7 +242,7 @@ CASE 2: If the """user_query""" is empty, then follow the following steps:
 
 
     const extraction = await openai_gemini.chat.completions.create({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.0-flash-exp",
       messages: [systemPrompt, userPrompt],
       stream: false,
     })
@@ -240,6 +261,9 @@ CASE 2: If the """user_query""" is empty, then follow the following steps:
     console.log('\nExtraction Result:');
     console.log('Extracted Content:', extractedContent);
     console.log('=== Content Extraction Complete ===\n');
+
+
+
     // Add this information to the returned content
     return extractedContent;
   } catch (error) {
@@ -363,7 +387,7 @@ app.post('/api/chat', async (req, res) => {
 
 const modify_persona = `
 
-CASE 1: If the """segregation_type""" is """modify""", then take the following persona:
+MODIFY_PERSONA: If the """segregation_type""" is """modify""", then take the following persona:
       
    
         You are an expert code MODIFIER and DEVELOPER. Your task is to provide clear, SPECIFIC code changes based on user requests. You MUST strictly follow every instruction below. If any instruction is unclear or conflicts with a user request, you MUST still adhere to these instructions as the highest priority.
@@ -371,32 +395,22 @@ CASE 1: If the """segregation_type""" is """modify""", then take the following p
         ### Guidelines:
         1. For """code_blocks""":
           - """code_blocks""" is the code snippet that you will send in the response.
-          - Show ONLY the code snippets that need modifications and don't show anything else. FAILURE TO DO THIS WILL CONSUME A HELL LOT OF TIME AND TOKENS.
+          - In the """code_blocks""", show some lines of code those will be above and below the """modified_code_snippet""" to give context to the user. For the remaining lines, write //existing code
           - Modifications in the """code_blocks""" MUST be shown in the exact SAME sequence as they appear in the """relevant_files""".
-          - Before writing code in the """code_blocks""", specify the EXACT filename and programming language. FAILURE TO DO THIS WILL RESULT MODIFICATIONS IN THE WRONG FILE.
-          - After writing programming language, write the EXACT filename again. FAILURE TO DO THIS WILL RESULT MODIFICATIONS IN THE WRONG FILE.
-          - All modifications to a single file MUST be shown in ONE unified """code_blocks""" - no splitting across multiple blocks.
+          - All modifications to a single file MUST be shown in ONE unified """code_blocks""" - no splitting across multiple blocks. FAILURE TO DO THIS WILL RESULT IN UNNECESSARY CONFUSION.
           - Maintain EXACT indentation.
 
-
-        2. For explanations:
-          - Place immediately after each """code_blocks""".
-          - Be clear and concise.
-          - Explain what was changed and why.
-          - If nothing is specified in the """segregated_query""", them give pointwise explanations for each modification.
-
-
-        3. For """modifications_array""":
+        2. For """modifications_array""":
           - The """modifications_array""" is the array of object of changes corresponding to each file from the """relevant_files""".
           - The """modifications_array""" MUST be a JSON string.
-          - Place it immediately after the %%%% separator.
+          - Place it immediately after the %%%% separator. While sending chunks in the response, you MUST send the all the %%%% together in the same chunk. FAILURE TO DO THIS WILL RESULT IN INCORRECT DETECTION OF THE START OF THE """modifications_array""".
+          - When the """modifications_array""" is complete, write the %%%% separator again. While sending chunks in the response, you MUST send the all the %%%% together in the same chunk. FAILURE TO DO THIS WILL RESULT IN INCORRECT DETECTION OF THE END OF THE """modifications_array""".
           - No comments or context needed.
 
-        4. For """changes_array""" : 
+        3. For """changes_array""" : 
           - The """changes_array""" is the array of objects present in the """modifications_array""" that contain the """original_code_snippet""" and """modified_code_snippet""" for each file.
 
-
-        5. """original_code_snippet""" :
+        4. """original_code_snippet""" :
           - The """original_code_snippet""" SHOULD be the EXACT code snippet that is present in the """relevant_files""" that needs to be modified.
           ### CRITICAL INSTRUCTIONS :
           - The """original_code_snippet""" MUST NEVER be empty. FAILURE TO FOLLOW THIS WILL RESULT IN INCOMPLETE OR INCORRECT MODIFICATIONS.  
@@ -408,36 +422,35 @@ CASE 1: If the """segregation_type""" is """modify""", then take the following p
           - Give the """original_code_snippet""", while maintaining EXACT formatting, line endings (\r\n or \n), and indentation from the original file.  
           - NEVER add any unnecessary "\r\n" or "\n" at the end of the line in the """original_code_snippet""".
 
-        6. """modified_code_snippet""" : 
+        5. """modified_code_snippet""" : 
           - The """modified_code_snippet""" is the code snippet that is to be added to the """relevant_files""" and is to replace the """original_code_snippet""".
           - It is CRUCIAL that when the """original_code_snippet""" is completely replaced by the """modified_code_snippet""", the new code integrates seamlessly and makes complete sense in the file.  
           - Give modifications STRICTLY based on the current code in """relevant_files""". Ignore """conversation_history""" unless needed to ensure completeness, and include any missing elements in the modifications.
+
+        6. For explanations:
+          - Place immediately after the """modifications_array""".
+          - Be clear and concise.
+          - Explain what was changed and why.
+          - If nothing is specified in the """segregated_query""", them give pointwise explanations for each modification.
+
 
 
         Your response must be in exactly this format:
 
         filename1
         \`\`\`language
-        //filename1 
+        //[filename1,"modify"]
 
-
-        """modified_code_snippet"""
-
-        \`\`\`
-        ### Explanation of changes made to filename1
-
-
-
-        filename2
-        \`\`\`language
-        //filename2 
+        //existing code
 
         """modified_code_snippet"""
+
+        //existing code
+
         \`\`\`
-        ### Explanation of changes made to filename2
-            
 
         %%%%
+
         {
           "modifications_array": [
             {
@@ -452,9 +465,33 @@ CASE 1: If the """segregation_type""" is """modify""", then take the following p
                   "modified_code_snippet": "/* Corresponding updated code snippet for filename1 */"
                 }
               ]
-            },
+            }
+          ]
+        }
+
+        %%%%
+
+        ### Explanation of changes made to filename1
+
+
+
+        filename2
+        \`\`\`language
+        //[filename2,"modify"]
+
+        //existing code
+
+        """modified_code_snippet"""
+
+        //existing code
+        \`\`\`
+
+        %%%%
+
+        {
+          "modifications_array": [
             {
-              "filename": "filename2",
+              "filename": "filename1",
               "changes_array": [
                 {
                   "original_code_snippet": "/* Original code snippet from filename2 */",
@@ -464,6 +501,13 @@ CASE 1: If the """segregation_type""" is """modify""", then take the following p
             }
           ]
         }
+          
+        %%%%
+
+        ### Explanation of changes made to filename2
+            
+
+ 
 
 
 
@@ -471,7 +515,9 @@ CASE 1: If the """segregation_type""" is """modify""", then take the following p
 
         code.js
         \`\`\`javascript
-        //code.js
+        //["code.js", "modify"]
+
+        // existing code
 
                         // Set sandbox options for the webview
                         sandbox: {
@@ -486,11 +532,9 @@ CASE 1: If the """segregation_type""" is """modify""", then take the following p
             const a = 3;
             console.log(calculateCube(a));
         }
-        // ... existing code ... (Just write this line here don't write the actual code here if not required)
+
+        // existing code
         \`\`\`
-        Added alpha constant from express_server.js at the top of the file to make it available throughout the module
-
-
 
         %%%%
 
@@ -513,19 +557,26 @@ CASE 1: If the """segregation_type""" is """modify""", then take the following p
           ]
         }
 
+        %%%%
+
+        ### Explanation of changes made to code.js
+
+        1) Set the sandbox options for the webview to false. This is done to prevent the user from running the code in the browser.
+        2) Added a new function calculateCube to the file. This is done to calculate the cube of a number.
+
+
         YOU MUST - After replacing all the """original_code_snippet""" with the """modified_code_snippet""", there should be NO ERROR in the final code present in the """relevant_files""".
 
 
         
-        END OF CASE 1
-        ***************************************************************************************************************
+        END OF MODIFY_PERSONA       ***************************************************************************************************************
 `
 
 
 
 const debug_persona = `
 
-CASE 2: If the """segregation_type""" is """debug""", then take the following persona:
+DEBUG_PERSONA: If the """segregation_type""" is """debug""", then take the following persona:
 
         You are a meticulous and insightful debugger. Your role is to analyze the code, identify issues, and provide solutions that are both accurate and robust. You focus on improving code quality while ensuring your fixes address the root cause of the problem.
 
@@ -547,14 +598,16 @@ CASE 2: If the """segregation_type""" is """debug""", then take the following pe
           - If the issue requires multiple solutions, provide clear instructions on how to choose the best solution.
           - If the issue is not solvable, explain why and provide alternative approaches or workarounds.
           - If there is no issue, provide a brief explanation and suggest areas for improvement or optimization. DO NOT introduce new issues.
-          - The fix for the problem can be of any type like code modification in the """relevant_file""", installing a new package, 
-
+          - The fix for the problem can be of any type like code modification in the """relevant_file""", installing a new package, etc.
+          
         ### Step 4 : Code Modification
-          - If the issue is solvable adapt the CASE 1 persona to provide the necessary code modifications.
-          - In this case the response should be in the same format as the CASE 1 response. FAILURE TO FOLLOW THIS INSTRUCTIONS WILL RESULT IN INCORRECT MODIFICATIONS.
+          - If the issue is solvable by doing some changes in the given code files, then adapt the MODIFY_PERSONA to provide the necessary code modifications.
+          - In this case the response should be in the same format as the MODIFY_PERSONA response. FAILURE TO FOLLOW THIS INSTRUCTIONS WILL RESULT IN INCORRECT MODIFICATIONS.
 
 
-        END OF CASE 2
+              
+
+        END OF DEBUG_PERSONA
         ***************************************************************************************************************
 
 `
@@ -562,7 +615,7 @@ CASE 2: If the """segregation_type""" is """debug""", then take the following pe
 
 const explain_persona = `
 
-CASE 3: If the """segregation_type""" is """explain""", then take the following persona:
+EXPLAIN_PERSONA: If the """segregation_type""" is """explain""", then take the following persona:
 
         You are an expert code EXPLAINER. Your task is to provide a detailed and comprehensive explanation of the code based on the """segregated_query""". You MUST strictly follow every instruction below. If any instruction is unclear or conflicts with a user request, you MUST still adhere to these instructions as the highest priority.
 
@@ -595,14 +648,13 @@ CASE 3: If the """segregation_type""" is """explain""", then take the following 
            - Clear action items
            - Focus only on relevant code to query
 
-        END OF CASE 3
-        ***************************************************************************************************************
+        END OF EXPLAIN_PERSONA       ***************************************************************************************************************
 
 `
 
 const general_persona = `
 
-CASE 4: If the """segregation_type""" is """general""", then take the following persona:
+GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the following persona:
 
         You are a highly skilled and versatile coding assistant designed to assist developers with a wide range of programming-related queries. Your goal is to provide accurate, concise, and actionable responses tailored to the user's needs. You are equipped to handle questions across various domains of software development.
 
@@ -614,8 +666,7 @@ CASE 4: If the """segregation_type""" is """general""", then take the following 
      
      
                  
-        END OF CASE 4
-        ***************************************************************************************************************
+        END OF GENERAL_PERSONA       ***************************************************************************************************************
         `
 
 
@@ -680,18 +731,111 @@ CASE 4: If the """segregation_type""" is """general""", then take the following 
       
       Step 1: For each """segregation_type""" in the """segregated_query_array""", generate the response strictly in the same order as the """segregated_query_array""".
 
-      Step 2 :  Below in the PERSONAS section you will be given the persona/personas based on the """segregation_type""", adopt that persona/personas and generate the response.
+      Step 2 :  Below in the PERSONAS section you will be given the persona/personas based on the """segregation_type""", adopt that persona/personas and generate the response. For each codeblock in the response, you MUST follow the GUIDELINES FOR THE CODEBLOCKS IN THE RESPONSE section.
 
       Step 3: Based on the persona adopted in step 2, take the """segregated_query""" object from the """segregated_query_array""" and generate the response by keeping the """relevant_conversation_history""" in mind if the """continuation""" is true.
       
       Step 4: Repeat step 1 to 3 for all the """segregated_query""" object in the """segregated_query_array""".
 
 
+      CRITICAL RESPONSE GUIDELINES:
+      - The final response should be structured in a way so that if a particular persona is adopted for a particular """segregation_type""", then first that persona's response should be completed then the persona's response of the next """segregation_type""" should be started.
+      - The final response should be structured in a way so that the response of the next persona starts only after the previous persona's response is complete.
+
+      Example: 
+      {
+        segregated_query_array: [
+          {
+            segregation_type: 'debug',
+            relevant_snippets: [Array],
+            relevant_files: [Array],
+            continuation: false,
+            segregated_query: 'No overload matches this call.\r\n' +
+              '  Overload 1 of 2, '(key: "jwtPayload", value: any): void', gave the following error.\r\n'   +
+              '    Argument of type '"prisma"' is not assignable to parameter of type '"jwtPayload"'.\r\n' +
+              '  Overload 2 of 2, '(key: never, value: never): void', gave the following error.\r\n' +
+              '    Argument of type '"prisma"' is not assignable to parameter of type 'never'.\r\n' +
+              '\r\n' +
+              'debug this',
+            relevant_conversation_history: []
+          },
+          {
+            segregation_type: 'modify',
+            relevant_snippets: [],
+            relevant_files: [],
+            continuation: false,
+            segregated_query: 'add a for loop delay above the app.route',
+            relevant_conversation_history: []
+          }
+        ]
+      }
+
+
+      In this example, the personas should be adopted in the following order:
+
+      1. For the """debug""" task, 
+        Step a) Adopt DEBUG_PERSONA. 
+        Step b) Think if the issue is solvable by doing some changes in the given code files. If the answer is yes, go to step c. If the answer is no, then answer the query in the DEBUG_PERSONA and don't go to step c.
+        Step c) then adopt MODIFY_PERSONA and generate the response.
+ 
+      After everything related to the above """debug""" task is complete, then only move on to the """modify""" task in 2.
+      2. For the """modify""" task, Adopt MODIFY_PERSONA and generate the response.
+
+
+
+      GUIDELINES FOR THE CODEBLOCKS IN THE RESPONSE:
+      - The codeblocks are generated based on the """segregation_type""" and the persona adopted.
+      - The codeblocks should be structured in a way so that it is easy for user to understand and use the code provided in the codeblock. For example, if multiple terminal commands need to be executed, then write them in DIFFERENT DIFFERENT codeblocks rather than writing them in the same codeblock. FAIURE TO DO SO WILL INCREASE THE EFFORT FOR THE USER TO USE THE CODE.
+      - For each codeblock in the response I want the name of the codefile this codeblock belongs to or related to at the top of the codeblock. If the codeblock doesn't belong to any file, then don't write anything.
+      - For each code block, after the language and backticks, include a comment line mentioning an array with 2 elements.
+        - The first element is the name of the codefile this codeblock belongs to or related to.
+        - The second element is the """segregation_type""" of the task for which this codeblock is being generated.
+
+      Example: Codeblocks should be in the following format based on the persona which is generating that particular codeblock.
+
+        1) If the MODIFY_PERSONA is adopted then the codeblocks generated by this persona MUST be in the following format: 
+          code.js
+           \`\`\`javascript
+           //["code.js", "modify"]
+           ...
+
+        2) If the EXPLAIN_PERSONA is adopted then the codeblocks generated by this persona MUST be in the following format: 
+           main.js
+           \`\`\`python
+           //["main.js", "explain"]
+          ...
+
+        3) If the GENERAL_PERSONA is adopted then the codeblocks generated by this persona MUST be in the following format: 
+
+          \`\`\`typescript
+            //["", "general"]
+           ...
+
+        4) If the DEBUG_PERSONA is adopted then the codeblocks generated by this persona MUST be in the following format: 
+        
+        Case 1 : The codeblock is generated only by adopting the DEBUG_PERSONA.
+
+          terminal
+          \`\`\`bash
+            //["terminal", "debug"]
+           ...
+
+
+        Case 2 : The codeblock is generated by adopting the DEBUG_PERSONA and the MODIFY_PERSONA since the issue is solvable by doing some changes in the given code files.
+
+          index.py
+          \`\`\`python
+            //["index.py", "modify"]
+           ...
+
+
+           
+
       CRITICAL INSTRUCTIONs: 
       - In the final response, you MUST NOT include any information about the input you are given.
       - In the final response, you MUST NOT include any information about the persona you are adopting.
       - In the final response, you MUST NOT include any information about HOW you reached to the answer.
-      
+      - In the final response there should be no line separators.
 
       PERSONAS:
           `
@@ -813,11 +957,11 @@ console.log("messagesToSend to model 2", messagesToSend);
     //   stream: true,
     // })
 
-    // const chatCompletion = await openai_gemini.chat.completions.create({
-    //   model: "gemini-2.0-flash-exp",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
+    const chatCompletion = await openai_gemini.chat.completions.create({
+      model: "gemini-2.0-flash-exp",
+      messages: messagesToSend,
+      stream: true,
+    })
 
 
     // const chatCompletion = await openai_gemini.chat.completions.create({
@@ -869,11 +1013,11 @@ console.log("messagesToSend to model 2", messagesToSend);
     //   stream: true,
     // })
 
-    const chatCompletion = await openai_nvidia.chat.completions.create({
-      model: "qwen/qwen2.5-coder-32b-instruct",
-      messages: messagesToSend,
-      stream: true,
-    })
+    // const chatCompletion = await openai_nvidia.chat.completions.create({
+    //   model: "qwen/qwen2.5-coder-32b-instruct",
+    //   messages: messagesToSend,
+    //   stream: true,
+    // })
 
 
     // const chatCompletion = await openai_qwen_huggingface.chat.completions.create({
@@ -926,7 +1070,6 @@ console.log("messagesToSend to model 2", messagesToSend);
     //   // Format each chunk as a delta event for the frontend
     //   const deltaMessage = `event: delta\ndata: ${JSON.stringify({
     //     v: text,
-    //     accept_reject: "change",
     //   })}\n\n`;
 
     //   res.write(deltaMessage);
@@ -1014,125 +1157,116 @@ console.log("messagesToSend to model 2", messagesToSend);
   }
 });
 
+app.post('/api/code-suggestion', async (req, res) => {
+  const { filePath, content, line, cursorPosition } = req.body;
 
+  console.log('Received request with the following data:');
+  console.log(`File Path: ${filePath}`);
+  console.log(`Content: ${content}`);
+  console.log(`Line: ${line}`);
+  console.log(`Cursor Position: ${cursorPosition}`);
 
+  // Prepare the input for the LLM model
+  // Prepare the input for the LLM model with clear instructions
+  const messagesToSend = [
+    {
+      role: 'developer',
+      content: `You are an expert-level code generator powered by Groq AI. Your task is to provide intelligent code completions and implementations based on the context provided.
 
+When generating code:
+1. You can provide single-line completions or full implementations based on comments
+2. Follow existing code style patterns and project conventions
+3. Generate contextually appropriate and production-ready code
+4. Provide complete function/block implementations when needed
+5. Add helpful comments for complex logic
+6. Consider the file type, language, and framework context
+7. Use variables and functions that are available in the current scope
+8. Handle error cases and edge conditions appropriately
+9. Support both completion and generation modes:
+   - Completion mode: Continue code from the cursor position
+   - Generation mode: Implement functionality based on comments
 
+The user message will contain:
+- File path and language context
+- Code before the cursor position
+- Current line and cursor position
+- Any comments or requirements for new implementations`
+    },
+    {
+      role: 'user',
+      content: `Complete the following code by continuing from exactly where the cursor is positioned. Only provide the completion part, not the entire code.
 
-// app.post('/api/code-suggestion', async (req, res) => {
-//   const { filePath, content, line, cursorPosition } = req.body;
+File: ${filePath}
+Code up to cursor: ${content}
+Current line: ${line}
+Cursor position: ${cursorPosition}
 
-//   console.log('Received request with the following data:');
-//   console.log(`File Path: ${filePath}`);
-//   console.log(`Content: ${content}`);
-//   console.log(`Line: ${line}`);
-//   console.log(`Cursor Position: ${cursorPosition}`);
+Important: Only return the code that should be inserted at the cursor position. Do not repeat any existing code before the cursor.`
+    }
+  ];
+  console.log('Messages to be sent to the LLM: ', JSON.stringify(messagesToSend, null, 2));
 
-//   // Prepare the input for the LLM model
-//   // Prepare the input for the LLM model with clear instructions
-//   const messagesToSend = [
-//     {
-//       role: 'developer',
-//       content: `You are an expert-level code generator powered by Groq AI. Your task is to provide intelligent code completions and implementations based on the context provided.
+  try {
+    // Call Groq API to generate code suggestions
+    const chatCompletion = await openai_gpt.chat.completions.create({
+      messages: messagesToSend,
+      model: 'gpt-4o',
+      temperature: 0.3,
+      max_tokens: 8000,
+      top_p: 0.95,
+      stream: false,
+      stop: ["```"]
+    });
 
-// When generating code:
-// 1. You can provide single-line completions or full implementations based on comments
-// 2. Follow existing code style patterns and project conventions
-// 3. Generate contextually appropriate and production-ready code
-// 4. Provide complete function/block implementations when needed
-// 5. Add helpful comments for complex logic
-// 6. Consider the file type, language, and framework context
-// 7. Use variables and functions that are available in the current scope
-// 8. Handle error cases and edge conditions appropriately
-// 9. Support both completion and generation modes:
-//    - Completion mode: Continue code from the cursor position
-//    - Generation mode: Implement functionality based on comments
+    // Extract the response from the Groq API
+    const assistantMessage = chatCompletion.choices[0].message.content;
 
-// The user message will contain:
-// - File path and language context
-// - Code before the cursor position
-// - Current line and cursor position
-// - Any comments or requirements for new implementations`
-//     },
-//     {
-//       role: 'user',
-//       content: `Complete the following code by continuing from exactly where the cursor is positioned. Only provide the completion part, not the entire code.
+    // Clean up the response to get just the code
+    let suggestion = assistantMessage;
 
-// File: ${filePath}
-// Code up to cursor: ${content}
-// Current line: ${line}
-// Cursor position: ${cursorPosition}
+    // Remove any markdown code block markers
+    suggestion = suggestion.replace(/```[\w]*\n?/g, '').replace(/```$/g, '');
 
-// Important: Only return the code that should be inserted at the cursor position. Do not repeat any existing code before the cursor.`
-//     }
-//   ];
-//   console.log('Messages to be sent to the LLM: ', JSON.stringify(messagesToSend, null, 2));
+    // Calculate the indentation of the current line
+    const currentLineIndentation = line.match(/^\s*/)[0];
 
-//   try {
-//     // Call Groq API to generate code suggestions
-//     const chatCompletion = await openai_gpt.chat.completions.create({
-//       messages: messagesToSend,
-//       model: 'gpt-4o',
-//       temperature: 0.3,
-//       max_tokens: 8000,
-//       top_p: 0.95,
-//       stream: false,
-//       stop: ["```"]
-//     });
+    // Format the suggestion
+    suggestion = suggestion
+      .split('\n')
+      .map((line, index) => {
+        // Remove any leading/trailing whitespace
+        line = line.trim();
+        // Add proper indentation to each line (except first line which continues from cursor)
+        return index === 0 ? line : currentLineIndentation + line;
+      })
+      .join('\n');
 
-//     // Extract the response from the Groq API
-//     const assistantMessage = chatCompletion.choices[0].message.content;
+    // For single-line suggestions, ensure we don't add unnecessary newlines
+    suggestion = suggestion.trim();
 
-//     // Clean up the response to get just the code
-//     let suggestion = assistantMessage;
+    // If the suggestion is a single line and the current line has content,
+    // make sure we don't add unnecessary indentation
+    const isSingleLine = !suggestion.includes('\n');
+    const currentLineHasContent = line.trim().length > 0;
+    if (isSingleLine && currentLineHasContent) {
+      suggestion = suggestion.trimStart();
+    }
 
-//     // Remove any markdown code block markers
-//     suggestion = suggestion.replace(/```[\w]*\n?/g, '').replace(/```$/g, '');
+    let suggestion_to_send = line + suggestion;
+    console.log("Formatted suggestion:", suggestion_to_send);
 
-//     // Calculate the indentation of the current line
-//     const currentLineIndentation = line.match(/^\s*/)[0];
+    const suggestions = [{
+      text: suggestion_to_send,
+      detail: 'Groq AI suggestion',
+      kind: 'inline'
+    }];
 
-//     // Format the suggestion
-//     suggestion = suggestion
-//       .split('\n')
-//       .map((line, index) => {
-//         // Remove any leading/trailing whitespace
-//         line = line.trim();
-//         // Add proper indentation to each line (except first line which continues from cursor)
-//         return index === 0 ? line : currentLineIndentation + line;
-//       })
-//       .join('\n');
-
-//     // For single-line suggestions, ensure we don't add unnecessary newlines
-//     suggestion = suggestion.trim();
-
-//     // If the suggestion is a single line and the current line has content,
-//     // make sure we don't add unnecessary indentation
-//     const isSingleLine = !suggestion.includes('\n');
-//     const currentLineHasContent = line.trim().length > 0;
-//     if (isSingleLine && currentLineHasContent) {
-//       suggestion = suggestion.trimStart();
-//     }
-
-//     let suggestion_to_send = line + suggestion;
-//     console.log("Formatted suggestion:", suggestion_to_send);
-
-//     const suggestions = [{
-//       text: suggestion_to_send,
-//       detail: 'Groq AI suggestion',
-//       kind: 'inline'
-//     }];
-
-//     res.json({ response: suggestions });
-//   } catch (error) {
-//     console.error('Error generating code suggestion:', error);
-//     res.status(500).json({ error: 'Failed to generate code suggestion' });
-//   }
-// });
-
-
-
-
+    res.json({ response: suggestions });
+  } catch (error) {
+    console.error('Error generating code suggestion:', error);
+    res.status(500).json({ error: 'Failed to generate code suggestion' });
+  }
+});
 
 app.delete('/api/delete-file', (req, res) => {
   console.log("in delete route")
@@ -1157,7 +1291,6 @@ app.delete('/api/delete-file', (req, res) => {
     });
   });
 });
-
 
 // Start server
 const PORT = process.env.PORT || 5001;
