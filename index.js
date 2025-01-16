@@ -1035,74 +1035,74 @@ GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the f
 
 
         // ANTHROPIC API
-        let completeAssistantMessage = "";
+//         let completeAssistantMessage = "";
 
-        // Use Claude's streaming API
-        await anthropic.messages
-            .stream({
-                messages: messagesToSend,
-                model: "claude-3-5-sonnet-20241022",
-                max_tokens: 5000,
-            })
-            .on("text", (text) => {
-                // Accumulate the complete message
-                completeAssistantMessage += text;
-                console.log("\nReceived text from model:", text); // Added raw chunk logging
+//         // Use Claude's streaming API
+//         await anthropic.messages
+//             .stream({
+//                 messages: messagesToSend,
+//                 model: "claude-3-5-sonnet-20241022",
+//                 max_tokens: 5000,
+//             })
+//             .on("text", (text) => {
+//                 // Accumulate the complete message
+//                 completeAssistantMessage += text;
+//                 console.log("\nReceived text from model:", text); // Added raw chunk logging
 
-                // Format each chunk as a delta event for the frontend
-                const deltaMessage = `event: delta\ndata: ${JSON.stringify({
-                    v: text,
-                })}\n\n`;
+//                 // Format each chunk as a delta event for the frontend
+//                 const deltaMessage = `event: delta\ndata: ${JSON.stringify({
+//                     v: text,
+//                 })}\n\n`;
 
-                res.write(deltaMessage);
-            })
-            .on("end", () => {
-                console.log(completeAssistantMessage);
+//                 res.write(deltaMessage);
+//             })
+//             .on("end", () => {
+//                 console.log(completeAssistantMessage);
 
-                // Add the complete message to conversation history
-                conversationHistory.push({
-                    role: "assistant",
-                    assistant_response: completeAssistantMessage,
-                    id: messageIdInt + 1,
-                });
+//                 // Add the complete message to conversation history
+//                 conversationHistory.push({
+//                     role: "assistant",
+//                     assistant_response: completeAssistantMessage,
+//                     id: messageIdInt + 1,
+//                 });
 
-                // Send completion event
-                res.write("event: done\ndata: [DONE]\n\n");
-                res.end();
-            })
-            .on("error", (error) => {
-                console.error("Error in streaming response:", error);
+//                 // Send completion event
+//                 res.write("event: done\ndata: [DONE]\n\n");
+//                 res.end();
+//             })
+//             .on("error", (error) => {
+//                 console.error("Error in streaming response:", error);
 
-                // Send error event
-                res.write(
-                    `event: error\ndata: ${JSON.stringify({
-                        error: "Error in streaming response",
-                    })}\n\n`
-                );
-                res.end();
-            });
-    } catch (error) {
-        console.error("Error in chat endpoint:", error);
-        console.log("=== Chat Request Failed ===\n");
+//                 // Send error event
+//                 res.write(
+//                     `event: error\ndata: ${JSON.stringify({
+//                         error: "Error in streaming response",
+//                     })}\n\n`
+//                 );
+//                 res.end();
+//             });
+//     } catch (error) {
+//         console.error("Error in chat endpoint:", error);
+//         console.log("=== Chat Request Failed ===\n");
 
-        // Check if headers have been sent before attempting to send error response
-        if (!res.headersSent) {
-            res.status(500).json({ error: "Error calling Groq API" });
-        } else {
-            // If headers were already sent, try to send error event
-            try {
-                res.write(
-                    `event: error\ndata: ${JSON.stringify({
-                        error: "Error calling Groq API",
-                    })}\n\n`
-                );
-                res.end();
-            } catch (e) {
-                console.error("Error sending error event:", e);
-            }
-        }
-    }
-});
+//         // Check if headers have been sent before attempting to send error response
+//         if (!res.headersSent) {
+//             res.status(500).json({ error: "Error calling Groq API" });
+//         } else {
+//             // If headers were already sent, try to send error event
+//             try {
+//                 res.write(
+//                     `event: error\ndata: ${JSON.stringify({
+//                         error: "Error calling Groq API",
+//                     })}\n\n`
+//                 );
+//                 res.end();
+//             } catch (e) {
+//                 console.error("Error sending error event:", e);
+//             }
+//         }
+//     }
+// });
 
 // ANTHROPIC API END
 
@@ -1111,64 +1111,64 @@ GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the f
 
 
 // other MODELS
-//     let completeAssistantMessage = '';
+    let completeAssistantMessage = '';
 
-//     for await (const chunk of chatCompletion) {
-//       // console.log('\nReceived chunk from model:', chunk.choices[0]?.delta);  // Added raw chunk logging
+    for await (const chunk of chatCompletion) {
+      // console.log('\nReceived chunk from model:', chunk.choices[0]?.delta);  // Added raw chunk logging
 
-//       const assistantMessage = chunk.choices[0]?.delta?.content || '';
-//       if (assistantMessage) {
-//         completeAssistantMessage += assistantMessage;
+      const assistantMessage = chunk.choices[0]?.delta?.content || '';
+      if (assistantMessage) {
+        completeAssistantMessage += assistantMessage;
 
-//         const deltaMessage = `event: delta\ndata: ${JSON.stringify({
-//           v: assistantMessage,
-//           accept_reject: "change",
-//         })}\n\n`;
-//         // console.log('Sending delta message:', { v: assistantMessage });
-//         res.write(deltaMessage);
+        const deltaMessage = `event: delta\ndata: ${JSON.stringify({
+          v: assistantMessage,
+          accept_reject: "change",
+        })}\n\n`;
+        // console.log('Sending delta message:', { v: assistantMessage });
+        res.write(deltaMessage);
 
-//       }
-//     }
+      }
+    }
 
-//     // Add logging for complete message
-//     console.log('\nComplete Assistant Message:');
-//     console.log('------------------------');
-//     console.log(completeAssistantMessage);
-//     console.log('------------------------\n');
+    // Add logging for complete message
+    console.log('\nComplete Assistant Message:');
+    console.log('------------------------');
+    console.log(completeAssistantMessage);
+    console.log('------------------------\n');
 
-//     conversationHistory.push({ role: 'assistant', assistant_response: completeAssistantMessage, id: messageIdInt + 1 });
+    conversationHistory.push({ role: 'assistant', assistant_response: completeAssistantMessage, id: messageIdInt + 1 });
 
-//     // console.log("conversationHistory", conversationHistory);
+    // console.log("conversationHistory", conversationHistory);
 
-//     console.log('\nCleaning up:');
-//     if (fs.existsSync(uploadPath)) {
-//       fs.rmSync(uploadPath, { recursive: true });
-//       console.log('Uploads directory cleaned');
-//     }
+    console.log('\nCleaning up:');
+    if (fs.existsSync(uploadPath)) {
+      fs.rmSync(uploadPath, { recursive: true });
+      console.log('Uploads directory cleaned');
+    }
 
-//     console.log('=== Chat Request Complete ===\n');
+    console.log('=== Chat Request Complete ===\n');
 
-//     res.write('event: done\ndata: [DONE]\n\n');
-//     res.end();
+    res.write('event: done\ndata: [DONE]\n\n');
+    res.end();
 
-//   } catch (error) {
-//     console.error('Error in chat endpoint:', error);
-//     console.log('=== Chat Request Failed ===\n');
+  } catch (error) {
+    console.error('Error in chat endpoint:', error);
+    console.log('=== Chat Request Failed ===\n');
 
-//     // Check if headers have been sent before attempting to send error response
-//     if (!res.headersSent) {
-//       res.status(500).json({ error: 'Error calling Groq API' });
-//     } else {
-//       // If headers were already sent, try to send error event
-//       try {
-//         res.write(`event: error\ndata: ${JSON.stringify({ error: 'Error calling Groq API' })}\n\n`);
-//         res.end();
-//       } catch (e) {
-//         console.error('Error sending error event:', e);
-//       }
-//     }
-//   }
-// });
+    // Check if headers have been sent before attempting to send error response
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Error calling Groq API' });
+    } else {
+      // If headers were already sent, try to send error event
+      try {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: 'Error calling Groq API' })}\n\n`);
+        res.end();
+      } catch (e) {
+        console.error('Error sending error event:', e);
+      }
+    }
+  }
+});
 
 // other MODELS END
 
