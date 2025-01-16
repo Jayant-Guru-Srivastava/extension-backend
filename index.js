@@ -1,16 +1,16 @@
-const express = require('express');
-const cors = require('cors');
-const dotenv = require('dotenv');
-const fs = require('fs');
-const path = require('path');
-const fileUpload = require('express-fileupload');
-const Groq = require('groq-sdk');
-const { marked } = require('marked'); // Import the marked library
+const express = require("express");
+const cors = require("cors");
+const dotenv = require("dotenv");
+const fs = require("fs");
+const path = require("path");
+const fileUpload = require("express-fileupload");
+const Groq = require("groq-sdk");
+const { marked } = require("marked"); // Import the marked library
 const OpenAI = require("openai");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const Anthropic = require('@anthropic-ai/sdk');
-const { PrismaClient } = require('@prisma/client');
-const jwt = require('jsonwebtoken');
+const Anthropic = require("@anthropic-ai/sdk");
+const { PrismaClient } = require("@prisma/client");
+const jwt = require("jsonwebtoken");
 
 // Load environment variables
 dotenv.config();
@@ -19,37 +19,36 @@ dotenv.config();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const openai_gemini = new OpenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
-})
+    apiKey: process.env.GEMINI_API_KEY,
+    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+});
 
 const openai_qwen_huggingface = new OpenAI({
-  apiKey: process.env.QWEN_HUGGINGFACE_API_KEY,
-  baseURL: "https://api-inference.huggingface.co/v1/"
-})
-
+    apiKey: process.env.QWEN_HUGGINGFACE_API_KEY,
+    baseURL: "https://api-inference.huggingface.co/v1/",
+});
 
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY, // defaults to process.env["ANTHROPIC_API_KEY"]
+    apiKey: process.env.ANTHROPIC_API_KEY, // defaults to process.env["ANTHROPIC_API_KEY"]
 });
 
 const openai_gpt = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+    apiKey: process.env.OPENAI_API_KEY,
+});
 
 const openai_groq = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1"
+    apiKey: process.env.GROQ_API_KEY,
+    baseURL: "https://api.groq.com/openai/v1",
 });
 
 const openai_nvidia = new OpenAI({
-  apiKey: process.env.OPENAI_NVIDIA,
-  baseURL: 'https://integrate.api.nvidia.com/v1',
-})
+    apiKey: process.env.OPENAI_NVIDIA,
+    baseURL: "https://integrate.api.nvidia.com/v1",
+});
 
 const openai_deepseek = new OpenAI({
-  baseURL: 'https://api.deepseek.com',
-  apiKey: process.env.DEEPSEEK_API_KEY
+    baseURL: "https://api.deepseek.com",
+    apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
 const prisma = new PrismaClient();
@@ -58,11 +57,11 @@ app.use(fileUpload()); // Enable file upload middleware
 app.use(cors());
 app.use(express.json());
 
-
 async function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log("Not authorized: Missing or invalid token")
     return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
   }
 
@@ -73,7 +72,7 @@ async function authenticate(req, res, next) {
     req.userId = decoded.id; // Attach user ID to the request
     next(); // Proceed to the next middleware
   } catch (err) {
-    console.error('Authentication error:', err.message);
+    console.log('Authentication error:', err.message);
     return res.status(403).json({ error: 'Forbidden: Invalid token' });
   }
 }
@@ -81,10 +80,9 @@ async function authenticate(req, res, next) {
 app.use('/api', authenticate); // Apply the authentication middleware to all routes starting with /api
 
 async function call_model1(input_model_1) {
-
-  const systemPrompt = {
-    role: 'assistant',
-    content: `
+    const systemPrompt = {
+        role: "assistant",
+        content: `
     You are a highly intelligent query analyzer specializing in understanding user queries, breaking them into distinct tasks, and analyzing contextual information such as code snippets, files, and conversation history. Your primary objective is to produce clear, structured, and actionable outputs that guide users in debugging, modifying, explaining, or addressing general coding-related tasks with precision and efficiency. Follow these steps for every query:
 
 
@@ -220,171 +218,159 @@ CASE 2: If the """user_query""" is empty, then follow the following steps:
 
 
 
-`
-  };
+`,
+    };
 
+    const userPrompt = {
+        role: "user",
+        content: JSON.stringify(input_model_1, null, 2),
+    };
 
+    try {
+        console.log("Calling Model 1 for content extraction...");
 
-  const userPrompt = {
-    role: 'user',
-    content: JSON.stringify(input_model_1, null, 2)
-  };
+        // const extraction = await openai_gpt.chat.completions.create({
+        //   model: "gpt-4o",
+        //   messages: [systemPrompt, userPrompt],
+        //   stream: false,
+        // })
 
-  try {
-    console.log('Calling Model 1 for content extraction...');
+        const extraction = await openai_gemini.chat.completions.create({
+            model: "gemini-2.0-flash-exp",
+            messages: [systemPrompt, userPrompt],
+            stream: false,
+        });
 
-    // const extraction = await openai_gpt.chat.completions.create({
-    //   model: "gpt-4o",
-    //   messages: [systemPrompt, userPrompt],
-    //   stream: false,
-    // })
+        const extractedContent = extraction.choices[0].message.content.trim();
 
+        // const extraction = await anthropic.messages.create({
+        //   model: "claude-3-5-sonnet-20241022",
+        //   messages: [systemPrompt, userPrompt],
+        //   max_tokens: 1024,
+        //   stream: false
+        // });
 
-    const extraction = await openai_gemini.chat.completions.create({
-      model: "gemini-2.0-flash-exp",
-      messages: [systemPrompt, userPrompt],
-      stream: false,
-    })
+        // const extractedContent = extraction.content[0].text;
 
-    const extractedContent = extraction.choices[0].message.content.trim();
+        console.log("\nExtraction Result:");
+        console.log("Extracted Content:", extractedContent);
+        console.log("=== Content Extraction Complete ===\n");
 
-    // const extraction = await anthropic.messages.create({
-    //   model: "claude-3-5-sonnet-20241022",
-    //   messages: [systemPrompt, userPrompt],
-    //   max_tokens: 1024,
-    //   stream: false
-    // });
-
-    // const extractedContent = extraction.content[0].text;
-
-    console.log('\nExtraction Result:');
-    console.log('Extracted Content:', extractedContent);
-    console.log('=== Content Extraction Complete ===\n');
-
-
-
-    // Add this information to the returned content
-    return extractedContent;
-  } catch (error) {
-    console.error('Error in content extraction:', error);
-    console.log('Falling back to full content');
-    console.log('=== Content Extraction Failed ===\n');
-    return;
-  }
-
+        // Add this information to the returned content
+        return extractedContent;
+    } catch (error) {
+        console.error("Error in content extraction:", error);
+        console.log("Falling back to full content");
+        console.log("=== Content Extraction Failed ===\n");
+        return;
+    }
 }
 
 let conversationHistory = [];
 
-app.post('/api/chat', async (req, res) => {
-  console.log('\n=== New Chat Request ===');
-  try {
-    const { content, messageId, isEdited, model } = req.body;
-    console.log('Request Details:');
-    console.log('Content:', content);
-    console.log('Message ID:', messageId);
-    console.log('Is Edited:', isEdited);
-    console.log('Model:', model);
+app.post("/api/chat", async (req, res) => {
+    console.log("\n=== New Chat Request ===");
+    try {
+        const { content, messageId, isEdited, model } = req.body;
+        console.log("Request Details:");
+        console.log("Content:", content);
+        console.log("Message ID:", messageId);
+        console.log("Is Edited:", isEdited);
+        console.log("Model:", model);
 
+        let messageIdInt = parseInt(messageId);
 
-    let messageIdInt = parseInt(messageId)
-
-    if (isEdited) {
-      const index = conversationHistory.findIndex(msg => msg.id === messageIdInt);
-      if (index !== -1) {
-        conversationHistory = conversationHistory.slice(0, index);
-      }
-    }
-
-    const uploadedFiles = req.files ? req.files.file_attached : null;
-    const files = uploadedFiles ? (Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles]) : [];
-    console.log('Files attached:', files.length);
-
-
-
-    const uploadPath = path.join(__dirname, 'uploads');
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath);
-      console.log(`Created uploads directory at: ${uploadPath}`);
-    }
-
-
-    console.log('\nProcessing Files:');
-    const codeFilesArray = []; // Initialize the array for code_files
-    const codeSnippetArray = []
-    for (const file of files) {
-      console.log('\nProcessing file:', file.name);
-
-      // Check if the file name contains line numbers in brackets
-      const lineNumberMatch = file.name.match(/\((\d+)-(\d+)\)$/);
-
-      const targetPath = path.join(uploadPath, file.name);
-
-      try {
-        await file.mv(targetPath);
-        console.log('File uploaded successfully:', file.name);
-
-        const fileContent = fs.readFileSync(targetPath, 'utf-8');
-
-        if (lineNumberMatch) {
-          // Add to codeSnippetArray with line numbers
-          codeSnippetArray.push({ [file.name]: fileContent });
-        } else {
-          // Add complete file to codeFilesArray as before
-          codeFilesArray.push({ [file.name]: fileContent });
-          console.log('Content added for:', file.name);
+        if (isEdited) {
+            const index = conversationHistory.findIndex(
+                (msg) => msg.id === messageIdInt
+            );
+            if (index !== -1) {
+                conversationHistory = conversationHistory.slice(0, index);
+            }
         }
 
-      } catch (err) {
-        console.error('Error processing file', file.name, ':', err);
-        return res.status(500).send('File upload failed.');
-      }
-    }
+        const uploadedFiles = req.files ? req.files.file_attached : null;
+        const files = uploadedFiles
+            ? Array.isArray(uploadedFiles)
+                ? uploadedFiles
+                : [uploadedFiles]
+            : [];
+        console.log("Files attached:", files.length);
 
-
-
-
-
-    const input_model_1 = {
-      user_query: content,
-      code_snippets: codeSnippetArray,
-      code_files: codeFilesArray,
-      conversation_history: conversationHistory.slice(-6).map(entry => {
-        if (entry.role === 'user') {
-          return { role: 'user', user_query: entry.user_query };
-        } else if (entry.role === 'assistant') {
-          return { role: 'assistant', assistant_response: entry.assistant_response };
+        const uploadPath = path.join(__dirname, "uploads");
+        if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath);
+            console.log(`Created uploads directory at: ${uploadPath}`);
         }
-      })
-    };
 
-    console.log("input_model_1", input_model_1)
+        console.log("\nProcessing Files:");
+        const codeFilesArray = []; // Initialize the array for code_files
+        const codeSnippetArray = [];
+        for (const file of files) {
+            console.log("\nProcessing file:", file.name);
 
+            // Check if the file name contains line numbers in brackets
+            const lineNumberMatch = file.name.match(/\((\d+)-(\d+)\)$/);
 
-    console.log('\nStarting content analysis...');
-    let model_1_output = {};
+            const targetPath = path.join(uploadPath, file.name);
 
+            try {
+                await file.mv(targetPath);
+                console.log("File uploaded successfully:", file.name);
 
+                const fileContent = fs.readFileSync(targetPath, "utf-8");
 
-    let model_1_output_json_string = '';
-      model_1_output_json_string = await call_model1(input_model_1);
-      // model_1_output = JSON.parse(model_1_output_json_string);
+                if (lineNumberMatch) {
+                    // Add to codeSnippetArray with line numbers
+                    codeSnippetArray.push({ [file.name]: fileContent });
+                } else {
+                    // Add complete file to codeFilesArray as before
+                    codeFilesArray.push({ [file.name]: fileContent });
+                    console.log("Content added for:", file.name);
+                }
+            } catch (err) {
+                console.error("Error processing file", file.name, ":", err);
+                return res.status(500).send("File upload failed.");
+            }
+        }
 
-      const cleanedUpdates = model_1_output_json_string
-      .split('\n') // Split the input into lines
-      .slice(1, -1) // Remove the first and last lines
-      .join('\n'); // Join the remaining lines back into a string
-      console.log("cleanedUpdates", cleanedUpdates)
-      model_1_output = JSON.parse(cleanedUpdates);
+        const input_model_1 = {
+            user_query: content,
+            code_snippets: codeSnippetArray,
+            code_files: codeFilesArray,
+            conversation_history: conversationHistory.slice(-6).map((entry) => {
+                if (entry.role === "user") {
+                    return { role: "user", user_query: entry.user_query };
+                } else if (entry.role === "assistant") {
+                    return {
+                        role: "assistant",
+                        assistant_response: entry.assistant_response,
+                    };
+                }
+            }),
+        };
 
-      console.log("model_1_output", model_1_output)
-    
+        console.log("input_model_1", input_model_1);
 
+        console.log("\nStarting content analysis...");
+        let model_1_output = {};
 
-    let messagesToSend = [];
+        let model_1_output_json_string = "";
+        model_1_output_json_string = await call_model1(input_model_1);
+        // model_1_output = JSON.parse(model_1_output_json_string);
 
+        const cleanedUpdates = model_1_output_json_string
+            .split("\n") // Split the input into lines
+            .slice(1, -1) // Remove the first and last lines
+            .join("\n"); // Join the remaining lines back into a string
+        console.log("cleanedUpdates", cleanedUpdates);
+        model_1_output = JSON.parse(cleanedUpdates);
 
-const modify_persona = `
+        console.log("model_1_output", model_1_output);
+
+        let messagesToSend = [];
+
+        const modify_persona = `
 
 MODIFY_PERSONA: If the """segregation_type""" is """modify""", then take the following persona:
       
@@ -569,11 +555,9 @@ MODIFY_PERSONA: If the """segregation_type""" is """modify""", then take the fol
 
         
         END OF MODIFY_PERSONA       ***************************************************************************************************************
-`
+`;
 
-
-
-const debug_persona = `
+        const debug_persona = `
 
 DEBUG_PERSONA: If the """segregation_type""" is """debug""", then take the following persona:
 
@@ -609,10 +593,9 @@ DEBUG_PERSONA: If the """segregation_type""" is """debug""", then take the follo
         END OF DEBUG_PERSONA
         ***************************************************************************************************************
 
-`
+`;
 
-
-const explain_persona = `
+        const explain_persona = `
 
 EXPLAIN_PERSONA: If the """segregation_type""" is """explain""", then take the following persona:
 
@@ -649,9 +632,9 @@ EXPLAIN_PERSONA: If the """segregation_type""" is """explain""", then take the f
 
         END OF EXPLAIN_PERSONA       ***************************************************************************************************************
 
-`
+`;
 
-const general_persona = `
+        const general_persona = `
 
 GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the following persona:
 
@@ -666,16 +649,11 @@ GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the f
      
                  
         END OF GENERAL_PERSONA       ***************************************************************************************************************
-        `
+        `;
 
-
-
-
-
-
-    const systemPrompt = {
-      role: 'assistant',
-      content: `
+        const systemPrompt = {
+            role: "assistant",
+            content: `
       
       You are an expert coding assistant designed to assist developers with modifying, debugging, explaining code, and answering general programming questions. Your role is to analyze incoming tasks, leverage context and history when necessary, and provide precise, actionable, and contextually appropriate responses.
 
@@ -837,462 +815,509 @@ GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the f
       - In the final response there should be no line separators.
 
       PERSONAS:
-          `
-    };
+          `,
+        };
+
+        // Create a Set to track which personas have been added
+        const addedPersonas = new Set();
+
+        // Add specific personas based on segregation types present in the array
+        model_1_output.segregated_query_array.forEach((query) => {
+            // Only add each persona type once
+            if (
+                query.segregation_type === "modify" &&
+                !addedPersonas.has("modify")
+            ) {
+                systemPrompt.content += modify_persona;
+                addedPersonas.add("modify");
+            }
+
+            if (query.segregation_type === "debug") {
+                // Also add modify persona for debug requests if not already added
+                if (!addedPersonas.has("modify")) {
+                    systemPrompt.content += modify_persona;
+                    addedPersonas.add("modify");
+                }
+
+                // Add debug persona if not already added
+                if (!addedPersonas.has("debug")) {
+                    systemPrompt.content += debug_persona;
+                    addedPersonas.add("debug");
+                }
+            }
+
+            if (
+                query.segregation_type === "explain" &&
+                !addedPersonas.has("explain")
+            ) {
+                systemPrompt.content += explain_persona;
+                addedPersonas.add("explain");
+            }
+
+            if (
+                query.segregation_type === "general" &&
+                !addedPersonas.has("general")
+            ) {
+                systemPrompt.content += general_persona;
+                addedPersonas.add("general");
+            }
+        });
+
+        model_1_output.segregated_query_array =
+            model_1_output.segregated_query_array.map((query) => {
+                return {
+                    ...query,
+                    // Transform relevant_snippets to include snippet contents
+                    relevant_snippets: query.relevant_snippets
+                        .map((snippetName) => {
+                            const snippetObj = codeSnippetArray.find(
+                                (snippet) =>
+                                    Object.keys(snippet)[0] === snippetName
+                            );
+                            return snippetObj
+                                ? { [snippetName]: snippetObj[snippetName] }
+                                : null;
+                        })
+                        .filter(Boolean),
+
+                    // Transform relevant_files to include file contents
+                    relevant_files: query.relevant_files
+                        .map((filename) => {
+                            const fileObj = codeFilesArray.find(
+                                (file) => Object.keys(file)[0] === filename
+                            );
+                            return fileObj
+                                ? { [filename]: fileObj[filename] }
+                                : null;
+                        })
+                        .filter(Boolean),
+                };
+            });
+
+        const input_model_2 = {
+            segregation_query_array: model_1_output.segregated_query_array,
+        };
+
+        messagesToSend = [
+            systemPrompt,
+            { role: "user", content: JSON.stringify(input_model_2, null, 2) }, // Send as string instead of array
+        ];
+
+        console.log("messagesToSend to model 2", messagesToSend);
+
+        conversationHistory.push({
+            role: "user",
+            user_query: content,
+            id: messageIdInt,
+        });
+        // console.log("conversationHistory_before_sending_to_model", conversationHistory)
+
+        // Set headers only once at the beginning
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.flushHeaders();
+
+        // const chatCompletion = await openai_gpt.chat.completions.create({
+        //   model: "gpt-4o",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // const chatCompletion = await anthropic.messages.create({
+        //   model: "claude-3-5-sonnet-20241022",
+        //   messages: messagesToSend,
+        //   stream: true,
+        //   max_tokens: 1024,
+
+        // })
+
+        //   await anthropic.messages.stream({
+        //     messages: messagesToSend,
+        //     model: 'claude-3-5-sonnet-20241022',
+        // max_tokens: 1024,
+        // }).on('text', (text) => {
+        //     console.log(text);
+        //     res.write(text);
+        // });
+
+        // const chatCompletion = await openai_gemini.chat.completions.create({
+        //   model: "gemini-1.5-flash",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        const chatCompletion = await openai_gemini.chat.completions.create({
+            model: "gemini-2.0-flash-exp",
+            messages: messagesToSend,
+            stream: true,
+        });
+
+        // const chatCompletion = await openai_gemini.chat.completions.create({
+        //   model: "gemini-1.5-pro",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // const chatCompletion = await openai_groq.chat.completions.create({
+        //   model: "llama-3.1-70b-versatile",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // constchatCompletion = await openai_gemini.chat.completions.create({
+        //   model: "gemini-1.5-flash-8b",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // const chatCompletion = await openai_nvidia.chat.completions.create({
+        //   model: "microsoft/phi-3.5-moe-instruct",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // const chatCompletion = await openai_nvidia.chat.completions.create({
+        //   model: "meta/llama-3.1-405b-instruct",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // const chatCompletion = await openai_nvidia.chat.completions.create({
+        //   model: "meta/llama-3.3-70b-instruct",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // const chatCompletion = await openai_nvidia.chat.completions.create({
+        //   model: "meta/llama-3.1-70b-instruct",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // const chatCompletion = await openai_nvidia.chat.completions.create({
+        //   model: "qwen/qwen2.5-coder-32b-instruct",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // const chatCompletion = await openai_qwen_huggingface.chat.completions.create({
+        //   model: "Qwen/Qwen2.5-72B-Instruct",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // const chatCompletion = await openai_qwen_huggingface.chat.completions.create({
+        //   model: "meta-llama/Llama-3.3-70B-Instruct",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // const chatCompletion = await openai_groq.chat.completions.create({
+        //   model: "llama-3.3-70b-versatile",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // const chatCompletion = await openai_qwen_huggingface.chat.completions.create({
+        //   model: "codellama/CodeLlama-34b-Instruct-hf",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
+
+        // const chatCompletion = await openai_deepseek.chat.completions.create({
+        //   model: "deepseek-chat",
+        //   messages: messagesToSend,
+        //   stream: true,
+        // })
 
 
 
-// Create a Set to track which personas have been added
-const addedPersonas = new Set();
 
-// Add specific personas based on segregation types present in the array
-model_1_output.segregated_query_array.forEach(query => {
-  // Only add each persona type once
-  if (query.segregation_type === 'modify' && !addedPersonas.has('modify')) {
-    systemPrompt.content += modify_persona;
-    addedPersonas.add('modify');
-  }
-  
-  if (query.segregation_type === 'debug') {
+        // ANTHROPIC API
+        let completeAssistantMessage = "";
 
-    // Also add modify persona for debug requests if not already added
-    if (!addedPersonas.has('modify')) {
-      systemPrompt.content += modify_persona;
-      addedPersonas.add('modify');
+        // Use Claude's streaming API
+        await anthropic.messages
+            .stream({
+                messages: messagesToSend,
+                model: "claude-3-5-sonnet-20241022",
+                max_tokens: 5000,
+            })
+            .on("text", (text) => {
+                // Accumulate the complete message
+                completeAssistantMessage += text;
+                console.log("\nReceived text from model:", text); // Added raw chunk logging
+
+                // Format each chunk as a delta event for the frontend
+                const deltaMessage = `event: delta\ndata: ${JSON.stringify({
+                    v: text,
+                })}\n\n`;
+
+                res.write(deltaMessage);
+            })
+            .on("end", () => {
+                console.log(completeAssistantMessage);
+
+                // Add the complete message to conversation history
+                conversationHistory.push({
+                    role: "assistant",
+                    assistant_response: completeAssistantMessage,
+                    id: messageIdInt + 1,
+                });
+
+                // Send completion event
+                res.write("event: done\ndata: [DONE]\n\n");
+                res.end();
+            })
+            .on("error", (error) => {
+                console.error("Error in streaming response:", error);
+
+                // Send error event
+                res.write(
+                    `event: error\ndata: ${JSON.stringify({
+                        error: "Error in streaming response",
+                    })}\n\n`
+                );
+                res.end();
+            });
+    } catch (error) {
+        console.error("Error in chat endpoint:", error);
+        console.log("=== Chat Request Failed ===\n");
+
+        // Check if headers have been sent before attempting to send error response
+        if (!res.headersSent) {
+            res.status(500).json({ error: "Error calling Groq API" });
+        } else {
+            // If headers were already sent, try to send error event
+            try {
+                res.write(
+                    `event: error\ndata: ${JSON.stringify({
+                        error: "Error calling Groq API",
+                    })}\n\n`
+                );
+                res.end();
+            } catch (e) {
+                console.error("Error sending error event:", e);
+            }
+        }
     }
-
-    // Add debug persona if not already added
-    if (!addedPersonas.has('debug')) {
-      systemPrompt.content += debug_persona;
-      addedPersonas.add('debug');
-    }
-  }
-  
-  if (query.segregation_type === 'explain' && !addedPersonas.has('explain')) {
-    systemPrompt.content += explain_persona;
-    addedPersonas.add('explain');
-  }
-  
-  if (query.segregation_type === 'general' && !addedPersonas.has('general')) {
-    systemPrompt.content += general_persona;
-    addedPersonas.add('general');
-  }
 });
 
-
-
-
-model_1_output.segregated_query_array = model_1_output.segregated_query_array.map(query => {
-  return {
-    ...query,
-   // Transform relevant_snippets to include snippet contents
-    relevant_snippets: query.relevant_snippets.map(snippetName => {
-      const snippetObj = codeSnippetArray.find(snippet => Object.keys(snippet)[0] === snippetName);
-      return snippetObj ? { [snippetName]: snippetObj[snippetName] } : null;
-    }).filter(Boolean),
-
-    // Transform relevant_files to include file contents
-    relevant_files: query.relevant_files.map(filename => {
-      const fileObj = codeFilesArray.find(file => Object.keys(file)[0] === filename);
-      return fileObj ? { [filename]: fileObj[filename] } : null;
-    }).filter(Boolean),
-  };
-});
+// ANTHROPIC API END
 
 
 
 
-    const input_model_2 = {
-      segregation_query_array: model_1_output.segregated_query_array,
-    };
 
-    messagesToSend = [
-      systemPrompt,
-      { role: 'user', content: JSON.stringify(input_model_2, null, 2) }  // Send as string instead of array
-    ];
+// other MODELS
+//     let completeAssistantMessage = '';
 
-console.log("messagesToSend to model 2", messagesToSend);
+//     for await (const chunk of chatCompletion) {
+//       // console.log('\nReceived chunk from model:', chunk.choices[0]?.delta);  // Added raw chunk logging
 
-    conversationHistory.push({ role: 'user', user_query: content, id: messageIdInt });
-    // console.log("conversationHistory_before_sending_to_model", conversationHistory)
+//       const assistantMessage = chunk.choices[0]?.delta?.content || '';
+//       if (assistantMessage) {
+//         completeAssistantMessage += assistantMessage;
 
-    // Set headers only once at the beginning
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders();
+//         const deltaMessage = `event: delta\ndata: ${JSON.stringify({
+//           v: assistantMessage,
+//           accept_reject: "change",
+//         })}\n\n`;
+//         // console.log('Sending delta message:', { v: assistantMessage });
+//         res.write(deltaMessage);
 
+//       }
+//     }
 
-    // const chatCompletion = await openai_gpt.chat.completions.create({
-    //   model: "gpt-4o",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
+//     // Add logging for complete message
+//     console.log('\nComplete Assistant Message:');
+//     console.log('------------------------');
+//     console.log(completeAssistantMessage);
+//     console.log('------------------------\n');
 
+//     conversationHistory.push({ role: 'assistant', assistant_response: completeAssistantMessage, id: messageIdInt + 1 });
 
-    // const chatCompletion = await anthropic.messages.create({
-    //   model: "claude-3-5-sonnet-20241022",
-    //   messages: messagesToSend,
-    //   stream: true,
-    //   max_tokens: 1024,
+//     // console.log("conversationHistory", conversationHistory);
 
-    // })
+//     console.log('\nCleaning up:');
+//     if (fs.existsSync(uploadPath)) {
+//       fs.rmSync(uploadPath, { recursive: true });
+//       console.log('Uploads directory cleaned');
+//     }
 
-    //   await anthropic.messages.stream({
-    //     messages: messagesToSend,
-    //     model: 'claude-3-5-sonnet-20241022',
-    // max_tokens: 1024,
-    // }).on('text', (text) => {
-    //     console.log(text);
-    //     res.write(text);
-    // });
+//     console.log('=== Chat Request Complete ===\n');
 
+//     res.write('event: done\ndata: [DONE]\n\n');
+//     res.end();
 
+//   } catch (error) {
+//     console.error('Error in chat endpoint:', error);
+//     console.log('=== Chat Request Failed ===\n');
 
+//     // Check if headers have been sent before attempting to send error response
+//     if (!res.headersSent) {
+//       res.status(500).json({ error: 'Error calling Groq API' });
+//     } else {
+//       // If headers were already sent, try to send error event
+//       try {
+//         res.write(`event: error\ndata: ${JSON.stringify({ error: 'Error calling Groq API' })}\n\n`);
+//         res.end();
+//       } catch (e) {
+//         console.error('Error sending error event:', e);
+//       }
+//     }
+//   }
+// });
 
-    // const chatCompletion = await openai_gemini.chat.completions.create({
-    //   model: "gemini-1.5-flash",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
+// other MODELS END
 
-    const chatCompletion = await openai_gemini.chat.completions.create({
-      model: "gemini-2.0-flash-exp",
-      messages: messagesToSend,
-      stream: true,
-    })
+// app.post("/api/code-suggestion", async (req, res) => {
+//     const { filePath, content, line, cursorPosition } = req.body;
 
+//     console.log("Received request with the following data:");
+//     console.log(`File Path: ${filePath}`);
+//     console.log(`Content: ${content}`);
+//     console.log(`Line: ${line}`);
+//     console.log(`Cursor Position: ${cursorPosition}`);
 
-    // const chatCompletion = await openai_gemini.chat.completions.create({
-    //   model: "gemini-1.5-pro",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
+//     // Prepare the input for the LLM model
+//     // Prepare the input for the LLM model with clear instructions
+//     const messagesToSend = [
+//         {
+//             role: "developer",
+//             content: `You are an expert-level code generator powered by Groq AI. Your task is to provide intelligent code completions and implementations based on the context provided.
 
-    // const chatCompletion = await openai_groq.chat.completions.create({
-    //   model: "llama-3.1-70b-versatile",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
+// When generating code:
+// 1. You can provide single-line completions or full implementations based on comments
+// 2. Follow existing code style patterns and project conventions
+// 3. Generate contextually appropriate and production-ready code
+// 4. Provide complete function/block implementations when needed
+// 5. Add helpful comments for complex logic
+// 6. Consider the file type, language, and framework context
+// 7. Use variables and functions that are available in the current scope
+// 8. Handle error cases and edge conditions appropriately
+// 9. Support both completion and generation modes:
+//    - Completion mode: Continue code from the cursor position
+//    - Generation mode: Implement functionality based on comments
 
+// The user message will contain:
+// - File path and language context
+// - Code before the cursor position
+// - Current line and cursor position
+// - Any comments or requirements for new implementations`,
+//         },
+//         {
+//             role: "user",
+//             content: `Complete the following code by continuing from exactly where the cursor is positioned. Only provide the completion part, not the entire code.
 
-    // constchatCompletion = await openai_gemini.chat.completions.create({
-    //   model: "gemini-1.5-flash-8b",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
+// File: ${filePath}
+// Code up to cursor: ${content}
+// Current line: ${line}
+// Cursor position: ${cursorPosition}
 
+// Important: Only return the code that should be inserted at the cursor position. Do not repeat any existing code before the cursor.`,
+//         },
+//     ];
+//     console.log(
+//         "Messages to be sent to the LLM: ",
+//         JSON.stringify(messagesToSend, null, 2)
+//     );
 
-    // const chatCompletion = await openai_nvidia.chat.completions.create({
-    //   model: "microsoft/phi-3.5-moe-instruct",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
+//     try {
+//         // Call Groq API to generate code suggestions
+//         const chatCompletion = await openai_gpt.chat.completions.create({
+//             messages: messagesToSend,
+//             model: "gpt-4o",
+//             temperature: 0.3,
+//             max_tokens: 8000,
+//             top_p: 0.95,
+//             stream: false,
+//             stop: ["```"],
+//         });
 
+//         // Extract the response from the Groq API
+//         const assistantMessage = chatCompletion.choices[0].message.content;
 
+//         // Clean up the response to get just the code
+//         let suggestion = assistantMessage;
 
+//         // Remove any markdown code block markers
+//         suggestion = suggestion
+//             .replace(/```[\w]*\n?/g, "")
+//             .replace(/```$/g, "");
 
-    // const chatCompletion = await openai_nvidia.chat.completions.create({
-    //   model: "meta/llama-3.1-405b-instruct",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
+//         // Calculate the indentation of the current line
+//         const currentLineIndentation = line.match(/^\s*/)[0];
 
-    
-    // const chatCompletion = await openai_nvidia.chat.completions.create({
-    //   model: "meta/llama-3.3-70b-instruct",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
+//         // Format the suggestion
+//         suggestion = suggestion
+//             .split("\n")
+//             .map((line, index) => {
+//                 // Remove any leading/trailing whitespace
+//                 line = line.trim();
+//                 // Add proper indentation to each line (except first line which continues from cursor)
+//                 return index === 0 ? line : currentLineIndentation + line;
+//             })
+//             .join("\n");
 
-        
-    // const chatCompletion = await openai_nvidia.chat.completions.create({
-    //   model: "meta/llama-3.1-70b-instruct",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
+//         // For single-line suggestions, ensure we don't add unnecessary newlines
+//         suggestion = suggestion.trim();
 
-    // const chatCompletion = await openai_nvidia.chat.completions.create({
-    //   model: "qwen/qwen2.5-coder-32b-instruct",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
+//         // If the suggestion is a single line and the current line has content,
+//         // make sure we don't add unnecessary indentation
+//         const isSingleLine = !suggestion.includes("\n");
+//         const currentLineHasContent = line.trim().length > 0;
+//         if (isSingleLine && currentLineHasContent) {
+//             suggestion = suggestion.trimStart();
+//         }
 
+//         let suggestion_to_send = line + suggestion;
+//         console.log("Formatted suggestion:", suggestion_to_send);
 
-    // const chatCompletion = await openai_qwen_huggingface.chat.completions.create({
-    //   model: "Qwen/Qwen2.5-72B-Instruct",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
+//         const suggestions = [
+//             {
+//                 text: suggestion_to_send,
+//                 detail: "Groq AI suggestion",
+//                 kind: "inline",
+//             },
+//         ];
 
+//         res.json({ response: suggestions });
+//     } catch (error) {
+//         console.error("Error generating code suggestion:", error);
+//         res.status(500).json({ error: "Failed to generate code suggestion" });
+//     }
+// });
 
-    // const chatCompletion = await openai_qwen_huggingface.chat.completions.create({
-    //   model: "meta-llama/Llama-3.3-70B-Instruct",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
-
-    // const chatCompletion = await openai_groq.chat.completions.create({
-    //   model: "llama-3.3-70b-versatile",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
-
-
-    // const chatCompletion = await openai_qwen_huggingface.chat.completions.create({
-    //   model: "codellama/CodeLlama-34b-Instruct-hf",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
-
-
-    // const chatCompletion = await openai_deepseek.chat.completions.create({
-    //   model: "deepseek-chat",
-    //   messages: messagesToSend,
-    //   stream: true,
-    // })
-
-
-
-    // let completeAssistantMessage = '';
-
-    // // Use Claude's streaming API
-    // await anthropic.messages.stream({
-    //   messages: messagesToSend,
-    //   model: 'claude-3-5-sonnet-20241022',
-    //   max_tokens: 5000,
-    // }).on('text', (text) => {
-    //   // Accumulate the complete message
-    //   completeAssistantMessage += text;
-    //   console.log('\nReceived text from model:', text);  // Added raw chunk logging
-
-    //   // Format each chunk as a delta event for the frontend
-    //   const deltaMessage = `event: delta\ndata: ${JSON.stringify({
-    //     v: text,
-    //   })}\n\n`;
-
-    //   res.write(deltaMessage);
-    // }).on('end', () => {
-    //       console.log(completeAssistantMessage);
-
-    //   // Add the complete message to conversation history
-    //   conversationHistory.push({
-    //     role: 'assistant',
-    //     assistant_response: completeAssistantMessage,
-    //     id: messageIdInt + 1
-    //   });
-
-    //   // Send completion event
-    //   res.write('event: done\ndata: [DONE]\n\n');
-    //   res.end();
-    // }).on('error', (error) => {
-    //   console.error('Error in streaming response:', error);
-
-    //   // Send error event
-    //   res.write(`event: error\ndata: ${JSON.stringify({
-    //     error: 'Error in streaming response'
-    //   })}\n\n`);
-    //   res.end();
-    // });
-
-
-
-    let completeAssistantMessage = '';
-
-    for await (const chunk of chatCompletion) {
-      // console.log('\nReceived chunk from model:', chunk.choices[0]?.delta);  // Added raw chunk logging
-
-      const assistantMessage = chunk.choices[0]?.delta?.content || '';
-      if (assistantMessage) {
-        completeAssistantMessage += assistantMessage;
-
-        const deltaMessage = `event: delta\ndata: ${JSON.stringify({
-          v: assistantMessage,
-          accept_reject: "change",
-        })}\n\n`;
-        // console.log('Sending delta message:', { v: assistantMessage });
-        res.write(deltaMessage);
-
-      }
+app.delete("/api/delete-file", (req, res) => {
+    console.log("in delete route");
+    const { filename } = req.body;
+    if (!filename) {
+        return res.status(400).json({ error: "Filename is required" });
     }
 
-    // Add logging for complete message
-    console.log('\nComplete Assistant Message:');
-    console.log('------------------------');
-    console.log(completeAssistantMessage);
-    console.log('------------------------\n');
+    const filePath = path.join(__dirname, "uploads", filename);
 
-    conversationHistory.push({ role: 'assistant', assistant_response: completeAssistantMessage, id: messageIdInt + 1 });
+    // Check if the file exists and delete it
+    fs.access(filePath, fs.constants.F_OK, (err) => {
+        if (err) {
+            return res.status(404).json({ error: "File not found" });
+        }
 
-    // console.log("conversationHistory", conversationHistory);
-
-    console.log('\nCleaning up:');
-    if (fs.existsSync(uploadPath)) {
-      fs.rmSync(uploadPath, { recursive: true });
-      console.log('Uploads directory cleaned');
-    }
-
-    console.log('=== Chat Request Complete ===\n');
-
-    res.write('event: done\ndata: [DONE]\n\n');
-    res.end();
-
-  } catch (error) {
-    console.error('Error in chat endpoint:', error);
-    console.log('=== Chat Request Failed ===\n');
-
-    // Check if headers have been sent before attempting to send error response
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Error calling Groq API' });
-    } else {
-      // If headers were already sent, try to send error event
-      try {
-        res.write(`event: error\ndata: ${JSON.stringify({ error: 'Error calling Groq API' })}\n\n`);
-        res.end();
-      } catch (e) {
-        console.error('Error sending error event:', e);
-      }
-    }
-  }
-});
-
-app.post('/api/code-suggestion', async (req, res) => {
-  const { filePath, content, line, cursorPosition } = req.body;
-
-  console.log('Received request with the following data:');
-  console.log(`File Path: ${filePath}`);
-  console.log(`Content: ${content}`);
-  console.log(`Line: ${line}`);
-  console.log(`Cursor Position: ${cursorPosition}`);
-
-  // Prepare the input for the LLM model
-  // Prepare the input for the LLM model with clear instructions
-  const messagesToSend = [
-    {
-      role: 'developer',
-      content: `You are an expert-level code generator powered by Groq AI. Your task is to provide intelligent code completions and implementations based on the context provided.
-
-When generating code:
-1. You can provide single-line completions or full implementations based on comments
-2. Follow existing code style patterns and project conventions
-3. Generate contextually appropriate and production-ready code
-4. Provide complete function/block implementations when needed
-5. Add helpful comments for complex logic
-6. Consider the file type, language, and framework context
-7. Use variables and functions that are available in the current scope
-8. Handle error cases and edge conditions appropriately
-9. Support both completion and generation modes:
-   - Completion mode: Continue code from the cursor position
-   - Generation mode: Implement functionality based on comments
-
-The user message will contain:
-- File path and language context
-- Code before the cursor position
-- Current line and cursor position
-- Any comments or requirements for new implementations`
-    },
-    {
-      role: 'user',
-      content: `Complete the following code by continuing from exactly where the cursor is positioned. Only provide the completion part, not the entire code.
-
-File: ${filePath}
-Code up to cursor: ${content}
-Current line: ${line}
-Cursor position: ${cursorPosition}
-
-Important: Only return the code that should be inserted at the cursor position. Do not repeat any existing code before the cursor.`
-    }
-  ];
-  console.log('Messages to be sent to the LLM: ', JSON.stringify(messagesToSend, null, 2));
-
-  try {
-    // Call Groq API to generate code suggestions
-    const chatCompletion = await openai_gpt.chat.completions.create({
-      messages: messagesToSend,
-      model: 'gpt-4o',
-      temperature: 0.3,
-      max_tokens: 8000,
-      top_p: 0.95,
-      stream: false,
-      stop: ["```"]
+        fs.unlink(filePath, (err) => {
+            if (err) {
+                return res.status(500).json({ error: "Error deleting file" });
+            }
+            res.status(200).json({
+                message: `${filename} deleted successfully`,
+            });
+        });
     });
-
-    // Extract the response from the Groq API
-    const assistantMessage = chatCompletion.choices[0].message.content;
-
-    // Clean up the response to get just the code
-    let suggestion = assistantMessage;
-
-    // Remove any markdown code block markers
-    suggestion = suggestion.replace(/```[\w]*\n?/g, '').replace(/```$/g, '');
-
-    // Calculate the indentation of the current line
-    const currentLineIndentation = line.match(/^\s*/)[0];
-
-    // Format the suggestion
-    suggestion = suggestion
-      .split('\n')
-      .map((line, index) => {
-        // Remove any leading/trailing whitespace
-        line = line.trim();
-        // Add proper indentation to each line (except first line which continues from cursor)
-        return index === 0 ? line : currentLineIndentation + line;
-      })
-      .join('\n');
-
-    // For single-line suggestions, ensure we don't add unnecessary newlines
-    suggestion = suggestion.trim();
-
-    // If the suggestion is a single line and the current line has content,
-    // make sure we don't add unnecessary indentation
-    const isSingleLine = !suggestion.includes('\n');
-    const currentLineHasContent = line.trim().length > 0;
-    if (isSingleLine && currentLineHasContent) {
-      suggestion = suggestion.trimStart();
-    }
-
-    let suggestion_to_send = line + suggestion;
-    console.log("Formatted suggestion:", suggestion_to_send);
-
-    const suggestions = [{
-      text: suggestion_to_send,
-      detail: 'Groq AI suggestion',
-      kind: 'inline'
-    }];
-
-    res.json({ response: suggestions });
-  } catch (error) {
-    console.error('Error generating code suggestion:', error);
-    res.status(500).json({ error: 'Failed to generate code suggestion' });
-  }
-});
-
-app.delete('/api/delete-file', (req, res) => {
-  console.log("in delete route")
-  const { filename } = req.body;
-  if (!filename) {
-    return res.status(400).json({ error: 'Filename is required' });
-  }
-
-  const filePath = path.join(__dirname, 'uploads', filename);
-
-  // Check if the file exists and delete it
-  fs.access(filePath, fs.constants.F_OK, (err) => {
-    if (err) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    fs.unlink(filePath, (err) => {
-      if (err) {
-        return res.status(500).json({ error: 'Error deleting file' });
-      }
-      res.status(200).json({ message: `${filename} deleted successfully` });
-    });
-  });
 });
 
 // Start server
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
