@@ -12,8 +12,7 @@ const Anthropic = require("@anthropic-ai/sdk");
 const { PrismaClient } = require("@prisma/client");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require('uuid');
-// const Redis = require('ioredis');
-// const redis = new Redis(); // Connect to Redis
+const { encode } = require('gpt-tokenizer');
 
 // Load environment variables
 dotenv.config();
@@ -59,6 +58,13 @@ const app = express();
 app.use(fileUpload()); // Enable file upload middleware
 app.use(cors());
 app.use(express.json());
+
+function countTokens(text, modelName) {
+    // Simple token counting logic for now
+    // You can add more sophisticated logic based on the model
+    const tokens = encode(text);
+    return tokens.length;
+}
 
 async function authenticate(req, res, next) {
     const authHeader = req.headers.authorization;
@@ -1376,6 +1382,19 @@ GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the f
             fs.rmSync(uploadPath, { recursive: true });
             console.log("Uploads directory cleaned");
         }
+
+        const inputTokens = countTokens(content, model);
+        const outputTokens = countTokens(completeAssistantMessage, model);
+
+        // Store token usage
+        await prisma.tokenUsage.create({
+            data: {
+                userId: userId,
+                model: model,
+                inputTokensUsed: inputTokens,
+                outputTokensUsed: outputTokens,
+            }
+        });
 
         console.log("=== Chat Request Complete ===\n");
 
