@@ -11,6 +11,9 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const Anthropic = require("@anthropic-ai/sdk");
 const { PrismaClient } = require("@prisma/client");
 const jwt = require("jsonwebtoken");
+const { v4: uuidv4 } = require('uuid');
+// const Redis = require('ioredis');
+// const redis = new Redis(); // Connect to Redis
 
 // Load environment variables
 dotenv.config();
@@ -58,28 +61,30 @@ app.use(cors());
 app.use(express.json());
 
 async function authenticate(req, res, next) {
-  const authHeader = req.headers.authorization;
+    const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.log("Not authorized: Missing or invalid token")
-    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
-  }
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        console.log("Not authorized: Missing or invalid token");
+        return res
+            .status(401)
+            .json({ error: "Unauthorized: Missing or invalid token" });
+    }
 
-  const token = authHeader.split(' ')[1];
+    const token = authHeader.split(" ")[1];
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET); // Verify token with your secret
-    req.userId = decoded.id; // Attach user ID to the request
-    next(); // Proceed to the next middleware
-  } catch (err) {
-    console.log('Authentication error:', err.message);
-    return res.status(403).json({ error: 'Forbidden: Invalid token' });
-  }
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET); // Verify token with your secret
+        req.userId = decoded.id; // Attach user ID to the request
+        next(); // Proceed to the next middleware
+    } catch (err) {
+        console.log("Authentication error:", err.message);
+        return res.status(403).json({ error: "Forbidden: Invalid token" });
+    }
 }
 
-app.use('/api', authenticate); // Apply the authentication middleware to all routes starting with /api
+app.use("/api", authenticate); // Apply the authentication middleware to all routes starting with /api
 
-async function call_model1(input_model_1) {
+async function call_model1(input_model_1, modelName) {
     const systemPrompt = {
         role: "assistant",
         content: `
@@ -227,30 +232,80 @@ CASE 2: If the """user_query""" is empty, then follow the following steps:
     };
 
     try {
-        console.log("Calling Model 1 for content extraction...");
+        console.log(
+            `Calling Model 1 -[${modelName}] for content extraction...`
+        );
 
-        // const extraction = await openai_gpt.chat.completions.create({
-        //   model: "gpt-4o",
-        //   messages: [systemPrompt, userPrompt],
-        //   stream: false,
-        // })
+        let openai;
+        switch (modelName) {
+            case "gpt-4o":
+                openai = openai_gpt;
+                break;
+            case "gpt-4o-mini":
+                openai = openai_gpt;
+                break;
+            case "o1":
+                openai = openai_gpt;
+                break;
+            case "o1-preview":
+                openai = openai_gpt;
+                break;
+            case "o1-mini":
+                openai = openai_gpt;
+                break;
+            case "gemini-2.0-flash-exp":
+                openai = openai_gemini;
+                break;
+            case "gemini-1.5-flash":
+                openai = openai_gemini;
+                break;
+            case "gemini-1.5-pro":
+                openai = openai_gemini;
+                break;
+            case "gemini-1.5-flash-8b":
+                openai = openai_gemini;
+                break;
+            case "llama-3.1-70b-versatile":
+                openai = openai_groq;
+                break;
+            case "meta/llama-3.1-70b-instruct":
+                openai = openai_nvidia;
+                break;
+            case "meta/llama-3.3-70b-instruct":
+                openai = openai_nvidia;
+                break;
+            case "llama-3.3-70b-versatile":
+                openai = openai_groq;
+                break;
+            case "meta/llama-3.1-405b-instruct":
+                openai = openai_nvidia;
+                break;
+            case "microsoft/phi-3.5-moe-instruct":
+                openai = openai_nvidia;
+                break;
+            case "qwen/qwen2.5-coder-32b-instruct":
+                openai = openai_nvidia;
+                break;
+            case "Qwen/Qwen2.5-72B-Instruct":
+                openai = openai_qwen_huggingface;
+            case "meta-llama/Llama-3.3-70B-Instruct":
+                openai = openai_qwen_huggingface;
+            case "codellama/CodeLlama-34b-Instruct-hf":
+                openai = openai_qwen_huggingface;
+            case "deepseek-chat":
+                openai = openai_deepseek;
+                break;
+            default:
+                throw new Error(`Model ${modelName} not supported`);
+        }
 
-        const extraction = await openai_gemini.chat.completions.create({
-            model: "gemini-2.0-flash-exp",
+        const extraction = await openai.chat.completions.create({
+            model: modelName,
             messages: [systemPrompt, userPrompt],
             stream: false,
         });
 
-        const extractedContent = extraction.choices[0].message.content.trim();
-
-        // const extraction = await anthropic.messages.create({
-        //   model: "claude-3-5-sonnet-20241022",
-        //   messages: [systemPrompt, userPrompt],
-        //   max_tokens: 1024,
-        //   stream: false
-        // });
-
-        // const extractedContent = extraction.content[0].text;
+        extractedContent = extraction.choices[0].message.content.trim();
 
         console.log("\nExtraction Result:");
         console.log("Extracted Content:", extractedContent);
@@ -266,27 +321,230 @@ CASE 2: If the """user_query""" is empty, then follow the following steps:
     }
 }
 
-let conversationHistory = [];
+app.post('/api/conversation-history', async (req, res) => {
+    const userId = req.userId;
+    const { repositoryName } = req.query;
+    const { iteration } = req.body; // Get iteration from request body
+    console.log("userId: ", userId);
+    console.log("Repository Name: ", repositoryName);
+    console.log("Iteration: ", iteration);
+
+    if (!userId || !repositoryName) {
+        return res.status(400).json({ error: 'Missing userId or repositoryName' });
+    }
+
+    try {
+        // Fetch all iterations of the conversation for the given userId and repositoryName
+        const conversations = await prisma.conversation.findMany({
+            where: {
+                userId: userId,
+                repositoryName: repositoryName,
+            },
+            orderBy: {
+                iteration: 'desc',
+            },
+            select: {
+                id: true,
+                iteration: true,
+                iterationName: true,
+            },
+        });
+
+        console.log("Conversations: ", conversations);
+        console.log(conversations.length);
+
+        if (conversations.length === 0) {
+            return res.status(404).json(conversations);
+        }
+
+        // Determine which iteration to fetch messages for
+        const targetIteration = iteration === -1 ? conversations[0].iteration : iteration;
+        
+        // Find the conversation with the target iteration
+        const selectedConversation = conversations.find(conv => conv.iteration === targetIteration);
+        
+        if (!selectedConversation) {
+            return res.status(404).json({ error: 'Specified iteration not found' });
+        }
+
+        // Fetch messages only for the selected iteration
+        const selectedIterationMessages = await prisma.message.findMany({
+            where: {
+                conversationId: selectedConversation.id,
+            },
+            orderBy: {
+                sequence: 'asc',
+            },
+        });
+
+        console.log("Selected Iteration Messages:", selectedIterationMessages);
+
+        // Clean the assistant messages
+        const cleanedMessages = selectedIterationMessages.map(message => {
+            if (message.role === 'assistant') {
+                console.log("Original Assistant Message:", message.content);
+                let cleanedContent = message.content;
+                const separator = "%%%%";
+                const firstSeparatorIndex = cleanedContent.indexOf(separator);
+                if (firstSeparatorIndex !== -1) {
+                    const secondSeparatorIndex = cleanedContent.indexOf(separator, firstSeparatorIndex + separator.length);
+                    if (secondSeparatorIndex !== -1) {
+                        cleanedContent = cleanedContent.substring(0, firstSeparatorIndex) + cleanedContent.substring(secondSeparatorIndex + separator.length);
+                    }
+                }
+                console.log("Cleaned Assistant Message:", cleanedContent);
+                return { ...message, content: cleanedContent };
+            }
+            return message;
+        });
+
+        console.log("Cleaned Messages:", cleanedMessages);
+
+        // Return the response with messages only for the selected iteration
+        const response = conversations.map((conversation) => ({
+            conversationId: conversation.id,
+            iteration: conversation.iteration,
+            iterationName: conversation.iterationName,
+            messages: conversation.iteration === targetIteration ? cleanedMessages : [], // Include messages only for target iteration
+        }));
+
+        res.json(response);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'An error occurred while fetching the conversation history' });
+    }
+});
+
+// app.post('/api/update-conversation', async (req, res) => {
+//     console.log("api/update-conversation route called");
+
+//     const { userId, repositoryName } = req.query;
+//     const { iteration, message } = req.body;
+//     // console.log(message);
+//     // console.log(message.role);
+//     // console.log(message.content);
+//     // console.log(message.sequence);
+
+//     // console.log("Iteration: ", iteration)
+
+
+
+    
+// });
+
+
+
+
+function updateMessages(role, content, sequence, userId, repositoryName, iteration){
+
+}
 
 app.post("/api/chat", async (req, res) => {
     console.log("\n=== New Chat Request ===");
     try {
-        const { content, messageId, isEdited, model } = req.body;
+        let conversationHistory = [];
+        const userId = req.userId;
+        const { repositoryName } = req.query;
+        const { content, messageId, isEdited, model, iteration, last_6_msgs } = req.body;
+
+        if (typeof last_6_msgs === 'string') {
+            try {
+                conversationHistory = JSON.parse(last_6_msgs);
+            } catch (error) {
+                console.error("Error parsing conversation history:", error);
+                conversationHistory = []; // Set to empty array if parsing fails
+            }
+        } else if (Array.isArray(last_6_msgs)) {
+            conversationHistory = last_6_msgs;
+        } else {
+            conversationHistory = []; // Set to empty array if it's not a string or array
+        }
+
+        console.log("Conversation history: ", conversationHistory);
+        console.log("User id: ", userId);
+        console.log("Repository name: ", repositoryName)
         console.log("Request Details:");
         console.log("Content:", content);
         console.log("Message ID:", messageId);
         console.log("Is Edited:", isEdited);
         console.log("Model:", model);
-
+        console.log("Iteration: ", iteration);
+        console.log("Conversations:", conversationHistory);
+        
+        let isEditedBool = isEdited == "true" ? true : false;
         let messageIdInt = parseInt(messageId);
+        let iterationInt = parseInt(iteration);
 
-        if (isEdited) {
-            const index = conversationHistory.findIndex(
-                (msg) => msg.id === messageIdInt
-            );
-            if (index !== -1) {
-                conversationHistory = conversationHistory.slice(0, index);
+        let conversation; // Declare conversation outside the if block
+
+        // Add the new user message to the database
+        try {
+            // Find the conversation (always make a new query)
+            conversation = await prisma.conversation.findFirst({
+                where: {
+                    userId,
+                    repositoryName,
+                    iteration: iterationInt,
+                }
+            });
+
+            // If conversation not found and iteration is 1, create a new conversation
+            if (!conversation && iterationInt === 1) {
+                conversation = await prisma.conversation.create({
+                    data: {
+                        userId,
+                        repositoryName,
+                        iteration: iterationInt,
+                        iterationName: `Iteration ${iterationInt}`, // You can customize the name
+                    }
+                });
+                console.log(`Created new conversation with id ${conversation.id} for iteration ${iterationInt}`);
             }
+
+            if (!conversation) {
+                throw new Error('Conversation not found');
+            }
+
+        } catch (error) {
+            console.error('Error creating new message:', error);
+            throw error;
+        }
+
+        if (isEditedBool) {
+            console.log("Inside try isEditedBool: ", isEditedBool);
+            try {
+                // Delete all messages with sequence greater than or equal to messageId
+                await prisma.message.deleteMany({
+                    where: {
+                        conversationId: conversation.id,
+                        sequence: {
+                            gte: messageIdInt
+                        }
+                    }
+                });
+
+                console.log(`Deleted messages with sequence >= ${messageIdInt} for conversation ${conversation.id}`);
+            } catch (error) {
+                console.error('Error handling edited message:', error);
+                throw error; // Re-throw to be caught by the outer try-catch
+            }
+        }
+
+        // Create the new message
+        try {
+            const newMessage = await prisma.message.create({
+                data: {
+                    conversationId: conversation.id,
+                    role: 'user',
+                    content: content,
+                    sequence: messageIdInt
+                }
+            });
+
+            console.log(`Created new message with sequence ${messageIdInt} for conversation ${conversation.id}`);
+        } catch (error) {
+            console.error('Error creating new message:', error);
+            throw error;
         }
 
         const uploadedFiles = req.files ? req.files.file_attached : null;
@@ -338,13 +596,13 @@ app.post("/api/chat", async (req, res) => {
             user_query: content,
             code_snippets: codeSnippetArray,
             code_files: codeFilesArray,
-            conversation_history: conversationHistory.slice(-6).map((entry) => {
+            conversation_history: conversationHistory.map((entry) => {
                 if (entry.role === "user") {
-                    return { role: "user", user_query: entry.user_query };
+                    return { role: "user", user_query: entry.content };
                 } else if (entry.role === "assistant") {
                     return {
                         role: "assistant",
-                        assistant_response: entry.assistant_response,
+                        assistant_response: entry.content,
                     };
                 }
             }),
@@ -356,15 +614,20 @@ app.post("/api/chat", async (req, res) => {
         let model_1_output = {};
 
         let model_1_output_json_string = "";
-        model_1_output_json_string = await call_model1(input_model_1);
-        // model_1_output = JSON.parse(model_1_output_json_string);
+        model_1_output_json_string = await call_model1(
+            input_model_1,
+            "deepseek-chat"
+        );
+        model_1_output = JSON.parse(model_1_output_json_string);
 
-        const cleanedUpdates = model_1_output_json_string
-            .split("\n") // Split the input into lines
-            .slice(1, -1) // Remove the first and last lines
-            .join("\n"); // Join the remaining lines back into a string
-        console.log("cleanedUpdates", cleanedUpdates);
-        model_1_output = JSON.parse(cleanedUpdates);
+        // const cleanedUpdates = model_1_output_json_string
+        //     .split("\n") // Split the input into lines
+        //     .slice(1, -1) // Remove the first and last lines
+        //     .join("\n"); // Join the remaining lines back into a string
+        // console.log("cleanedUpdates", cleanedUpdates);
+        // model_1_output = JSON.parse(cleanedUpdates);
+        // model_1_output = JSON.parse(cleanedUpdates);
+
 
         console.log("model_1_output", model_1_output);
 
@@ -806,7 +1069,6 @@ GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the f
            ...
 
 
-           
 
       CRITICAL INSTRUCTIONs: 
       - In the final response, you MUST NOT include any information about the input you are given.
@@ -918,256 +1180,229 @@ GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the f
         res.setHeader("Connection", "keep-alive");
         res.flushHeaders();
 
-        // const chatCompletion = await openai_gpt.chat.completions.create({
-        //   model: "gpt-4o",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
+        let openai;
+        switch (model) {
+            case "gpt-4o":
+                openai = openai_gpt;
+                break;
+            case "gpt-4o-mini":
+                openai = openai_gpt;
+                break;
+            case "o1":
+                openai = openai_gpt;
+                break;
+            case "o1-preview":
+                openai = openai_gpt;
+                break;
+            case "o1-mini":
+                openai = openai_gpt;
+                break;
+            case "gemini-2.0-flash-exp":
+                openai = openai_gemini;
+                break;
+            case "gemini-1.5-flash":
+                openai = openai_gemini;
+                break;
+            case "gemini-1.5-pro":
+                openai = openai_gemini;
+                break;
+            case "gemini-1.5-flash-8b":
+                openai = openai_gemini;
+                break;
+            case "llama-3.1-70b-versatile":
+                openai = openai_groq;
+                break;
+            case "meta/llama-3.1-70b-instruct":
+                openai = openai_nvidia;
+                break;
+            case "meta/llama-3.3-70b-instruct":
+                openai = openai_nvidia;
+                break;
+            case "llama-3.3-70b-versatile":
+                openai = openai_groq;
+                break;
+            case "meta/llama-3.1-405b-instruct":
+                openai = openai_nvidia;
+                break;
+            case "microsoft/phi-3.5-moe-instruct":
+                openai = openai_nvidia;
+                break;
+            case "qwen/qwen2.5-coder-32b-instruct":
+                openai = openai_nvidia;
+                break;
+            case "Qwen/Qwen2.5-72B-Instruct":
+                openai = openai_qwen_huggingface;
+            case "meta-llama/Llama-3.3-70B-Instruct":
+                openai = openai_qwen_huggingface;
+            case "codellama/CodeLlama-34b-Instruct-hf":
+                openai = openai_qwen_huggingface;
+            case "deepseek-chat":
+                openai = openai_deepseek;
+                break;
+            default:
+                throw new Error(`Model ${model} not supported`);
+        }
 
-        // const chatCompletion = await anthropic.messages.create({
-        //   model: "claude-3-5-sonnet-20241022",
-        //   messages: messagesToSend,
-        //   stream: true,
-        //   max_tokens: 1024,
-
-        // })
-
-        //   await anthropic.messages.stream({
-        //     messages: messagesToSend,
-        //     model: 'claude-3-5-sonnet-20241022',
-        // max_tokens: 1024,
-        // }).on('text', (text) => {
-        //     console.log(text);
-        //     res.write(text);
-        // });
-
-        // const chatCompletion = await openai_gemini.chat.completions.create({
-        //   model: "gemini-1.5-flash",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        const chatCompletion = await openai_gemini.chat.completions.create({
-            model: "gemini-2.0-flash-exp",
+        const chatCompletion = await openai.chat.completions.create({
+            model: model,
             messages: messagesToSend,
             stream: true,
         });
 
-        // const chatCompletion = await openai_gemini.chat.completions.create({
-        //   model: "gemini-1.5-pro",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        // const chatCompletion = await openai_groq.chat.completions.create({
-        //   model: "llama-3.1-70b-versatile",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        // constchatCompletion = await openai_gemini.chat.completions.create({
-        //   model: "gemini-1.5-flash-8b",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        // const chatCompletion = await openai_nvidia.chat.completions.create({
-        //   model: "microsoft/phi-3.5-moe-instruct",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        // const chatCompletion = await openai_nvidia.chat.completions.create({
-        //   model: "meta/llama-3.1-405b-instruct",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        // const chatCompletion = await openai_nvidia.chat.completions.create({
-        //   model: "meta/llama-3.3-70b-instruct",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        // const chatCompletion = await openai_nvidia.chat.completions.create({
-        //   model: "meta/llama-3.1-70b-instruct",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        // const chatCompletion = await openai_nvidia.chat.completions.create({
-        //   model: "qwen/qwen2.5-coder-32b-instruct",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        // const chatCompletion = await openai_qwen_huggingface.chat.completions.create({
-        //   model: "Qwen/Qwen2.5-72B-Instruct",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        // const chatCompletion = await openai_qwen_huggingface.chat.completions.create({
-        //   model: "meta-llama/Llama-3.3-70B-Instruct",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        // const chatCompletion = await openai_groq.chat.completions.create({
-        //   model: "llama-3.3-70b-versatile",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        // const chatCompletion = await openai_qwen_huggingface.chat.completions.create({
-        //   model: "codellama/CodeLlama-34b-Instruct-hf",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-        // const chatCompletion = await openai_deepseek.chat.completions.create({
-        //   model: "deepseek-chat",
-        //   messages: messagesToSend,
-        //   stream: true,
-        // })
-
-
-
-
         // ANTHROPIC API
-//         let completeAssistantMessage = "";
+        //         let completeAssistantMessage = "";
 
-//         // Use Claude's streaming API
-//         await anthropic.messages
-//             .stream({
-//                 messages: messagesToSend,
-//                 model: "claude-3-5-sonnet-20241022",
-//                 max_tokens: 5000,
-//             })
-//             .on("text", (text) => {
-//                 // Accumulate the complete message
-//                 completeAssistantMessage += text;
-//                 console.log("\nReceived text from model:", text); // Added raw chunk logging
+        //         // Use Claude's streaming API
+        //         await anthropic.messages
+        //             .stream({
+        //                 messages: messagesToSend,
+        //                 model: "claude-3-5-sonnet-20241022",
+        //                 max_tokens: 5000,
+        //             })
+        //             .on("text", (text) => {
+        //                 // Accumulate the complete message
+        //                 completeAssistantMessage += text;
+        //                 console.log("\nReceived text from model:", text); // Added raw chunk logging
 
-//                 // Format each chunk as a delta event for the frontend
-//                 const deltaMessage = `event: delta\ndata: ${JSON.stringify({
-//                     v: text,
-//                 })}\n\n`;
+        //                 // Format each chunk as a delta event for the frontend
+        //                 const deltaMessage = `event: delta\ndata: ${JSON.stringify({
+        //                     v: text,
+        //                 })}\n\n`;
 
-//                 res.write(deltaMessage);
-//             })
-//             .on("end", () => {
-//                 console.log(completeAssistantMessage);
+        //                 res.write(deltaMessage);
+        //             })
+        //             .on("end", () => {
+        //                 console.log(completeAssistantMessage);
 
-//                 // Add the complete message to conversation history
-//                 conversationHistory.push({
-//                     role: "assistant",
-//                     assistant_response: completeAssistantMessage,
-//                     id: messageIdInt + 1,
-//                 });
+        //                 // Add the complete message to conversation history
+        //                 conversationHistory.push({
+        //                     role: "assistant",
+        //                     assistant_response: completeAssistantMessage,
+        //                     id: messageIdInt + 1,
+        //                 });
 
-//                 // Send completion event
-//                 res.write("event: done\ndata: [DONE]\n\n");
-//                 res.end();
-//             })
-//             .on("error", (error) => {
-//                 console.error("Error in streaming response:", error);
+        //                 // Send completion event
+        //                 res.write("event: done\ndata: [DONE]\n\n");
+        //                 res.end();
+        //             })
+        //             .on("error", (error) => {
+        //                 console.error("Error in streaming response:", error);
 
-//                 // Send error event
-//                 res.write(
-//                     `event: error\ndata: ${JSON.stringify({
-//                         error: "Error in streaming response",
-//                     })}\n\n`
-//                 );
-//                 res.end();
-//             });
-//     } catch (error) {
-//         console.error("Error in chat endpoint:", error);
-//         console.log("=== Chat Request Failed ===\n");
+        //                 // Send error event
+        //                 res.write(
+        //                     `event: error\ndata: ${JSON.stringify({
+        //                         error: "Error in streaming response",
+        //                     })}\n\n`
+        //                 );
+        //                 res.end();
+        //             });
+        //     } catch (error) {
+        //         console.error("Error in chat endpoint:", error);
+        //         console.log("=== Chat Request Failed ===\n");
 
-//         // Check if headers have been sent before attempting to send error response
-//         if (!res.headersSent) {
-//             res.status(500).json({ error: "Error calling Groq API" });
-//         } else {
-//             // If headers were already sent, try to send error event
-//             try {
-//                 res.write(
-//                     `event: error\ndata: ${JSON.stringify({
-//                         error: "Error calling Groq API",
-//                     })}\n\n`
-//                 );
-//                 res.end();
-//             } catch (e) {
-//                 console.error("Error sending error event:", e);
-//             }
-//         }
-//     }
-// });
+        //         // Check if headers have been sent before attempting to send error response
+        //         if (!res.headersSent) {
+        //             res.status(500).json({ error: "Error calling Groq API" });
+        //         } else {
+        //             // If headers were already sent, try to send error event
+        //             try {
+        //                 res.write(
+        //                     `event: error\ndata: ${JSON.stringify({
+        //                         error: "Error calling Groq API",
+        //                     })}\n\n`
+        //                 );
+        //                 res.end();
+        //             } catch (e) {
+        //                 console.error("Error sending error event:", e);
+        //             }
+        //         }
+        //     }
+        // });
 
-// ANTHROPIC API END
+        // ANTHROPIC API END
 
+        // other MODELS
+        let completeAssistantMessage = "";
 
+        for await (const chunk of chatCompletion) {
+            // console.log('\nReceived chunk from model:', chunk.choices[0]?.delta);  // Added raw chunk logging
 
+            const assistantMessage = chunk.choices[0]?.delta?.content || "";
+            if (assistantMessage) {
+                completeAssistantMessage += assistantMessage;
 
+                const deltaMessage = `event: delta\ndata: ${JSON.stringify({
+                    v: assistantMessage,
+                    accept_reject: "change",
+                })}\n\n`;
+                // console.log('Sending delta message:', { v: assistantMessage });
+                res.write(deltaMessage);
+            }
+        }
 
-// other MODELS
-    let completeAssistantMessage = '';
+        // Add logging for complete message
+        console.log("\nComplete Assistant Message:");
+        console.log("------------------------");
+        console.log(completeAssistantMessage);
+        console.log("------------------------\n");
 
-    for await (const chunk of chatCompletion) {
-      // console.log('\nReceived chunk from model:', chunk.choices[0]?.delta);  // Added raw chunk logging
+        conversationHistory.push({
+            role: "assistant",
+            assistant_response: completeAssistantMessage,
+            id: messageIdInt + 1,
+        });
 
-      const assistantMessage = chunk.choices[0]?.delta?.content || '';
-      if (assistantMessage) {
-        completeAssistantMessage += assistantMessage;
+        // Add the assistant message to the database
+        try {
+            const assistantMessage = await prisma.message.create({
+                data: {
+                    conversationId: conversation.id,
+                    role: 'assistant',
+                    content: completeAssistantMessage,
+                    sequence: messageIdInt + 1
+                }
+            });
 
-        const deltaMessage = `event: delta\ndata: ${JSON.stringify({
-          v: assistantMessage,
-          accept_reject: "change",
-        })}\n\n`;
-        // console.log('Sending delta message:', { v: assistantMessage });
-        res.write(deltaMessage);
+            console.log(`Created new assistant message with sequence ${messageIdInt + 1} for conversation ${conversation.id}`);
+        } catch (error) {
+            console.error('Error creating new assistant message:', error);
+            throw error;
+        }
 
-      }
-    }
+        // console.log("conversationHistory", conversationHistory);
 
-    // Add logging for complete message
-    console.log('\nComplete Assistant Message:');
-    console.log('------------------------');
-    console.log(completeAssistantMessage);
-    console.log('------------------------\n');
+        console.log("\nCleaning up:");
+        if (fs.existsSync(uploadPath)) {
+            fs.rmSync(uploadPath, { recursive: true });
+            console.log("Uploads directory cleaned");
+        }
 
-    conversationHistory.push({ role: 'assistant', assistant_response: completeAssistantMessage, id: messageIdInt + 1 });
+        console.log("=== Chat Request Complete ===\n");
 
-    // console.log("conversationHistory", conversationHistory);
-
-    console.log('\nCleaning up:');
-    if (fs.existsSync(uploadPath)) {
-      fs.rmSync(uploadPath, { recursive: true });
-      console.log('Uploads directory cleaned');
-    }
-
-    console.log('=== Chat Request Complete ===\n');
-
-    res.write('event: done\ndata: [DONE]\n\n');
-    res.end();
-
-  } catch (error) {
-    console.error('Error in chat endpoint:', error);
-    console.log('=== Chat Request Failed ===\n');
-
-    // Check if headers have been sent before attempting to send error response
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Error calling Groq API' });
-    } else {
-      // If headers were already sent, try to send error event
-      try {
-        res.write(`event: error\ndata: ${JSON.stringify({ error: 'Error calling Groq API' })}\n\n`);
+        res.write("event: done\ndata: [DONE]\n\n");
         res.end();
-      } catch (e) {
-        console.error('Error sending error event:', e);
-      }
+    } catch (error) {
+        console.error("Error in chat endpoint:", error);
+        console.log("=== Chat Request Failed ===\n");
+
+        // Check if headers have been sent before attempting to send error response
+        if (!res.headersSent) {
+            res.status(500).json({ error: "Error calling Groq API" });
+        } else {
+            // If headers were already sent, try to send error event
+            try {
+                res.write(
+                    `event: error\ndata: ${JSON.stringify({
+                        error: "Error calling Groq API",
+                    })}\n\n`
+                );
+                res.end();
+            } catch (e) {
+                console.error("Error sending error event:", e);
+            }
+        }
     }
-  }
+
 });
 
 // other MODELS END

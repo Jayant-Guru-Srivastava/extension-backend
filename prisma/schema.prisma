@@ -24,7 +24,7 @@ model User {
   tokenUsage       TokenUsage[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
-  conversations    Conversation[]
+  conversations    Conversation[] 
 }
 
 model TokenUsage {
@@ -43,10 +43,15 @@ model Conversation {
   id             String    @id @default(uuid())
   userId         String
   repositoryName String // e.g., "dub.sh"
-  iteration      Int      // Iteration number
+  iteration      Int // Iteration number
+  iterationName  String // e.g., "What does this repository do?"
   createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
   user           User      @relation(fields: [userId], references: [id])
   messages       Message[]
+  completeMessages CompleteMessage[]
+
+  @@unique([userId, repositoryName, iteration]) // Unique constraint
 }
 
 model Message {
@@ -54,7 +59,20 @@ model Message {
   conversationId String
   role           String // "user" or "assistant"
   content        String
-  sequence       Int      // Order within the conversation
+  sequence       Int // Order within the conversation
   createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([conversationId, sequence])
+}
+
+model CompleteMessage {
+  id             String       @id @default(uuid())
+  conversationId String
+  role           String // "user" or "assistant"
+  content        String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   conversation   Conversation @relation(fields: [conversationId], references: [id])
 }
