@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.33.1",
+    "@anthropic-ai/tokenizer": "^0.0.4",
     "@faker-js/faker": "^9.4.0",
     "@google/generative-ai": "^0.21.0",
     "@huggingface/inference": "^2.8.1",

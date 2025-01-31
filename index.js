@@ -12,7 +12,9 @@ const Anthropic = require("@anthropic-ai/sdk");
 const { PrismaClient } = require("@prisma/client");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require('uuid');
-const { encode } = require('gpt-tokenizer');
+const { encode: encodeGPT } = require('gpt-tokenizer');
+const { encode: encodeClaude } = require('@anthropic-ai/tokenizer');
+
 
 // Load environment variables
 dotenv.config();
@@ -420,30 +422,7 @@ app.post('/api/conversation-history', async (req, res) => {
         res.status(500).json({ error: 'An error occurred while fetching the conversation history' });
     }
 });
-
-// app.post('/api/update-conversation', async (req, res) => {
-//     console.log("api/update-conversation route called");
-
-//     const { userId, repositoryName } = req.query;
-//     const { iteration, message } = req.body;
-//     // console.log(message);
-//     // console.log(message.role);
-//     // console.log(message.content);
-//     // console.log(message.sequence);
-
-//     // console.log("Iteration: ", iteration)
-
-
-
-    
-// });
-
-
-
-
-function updateMessages(role, content, sequence, userId, repositoryName, iteration){
-
-}
+// Can 
 
 app.post("/api/chat", async (req, res) => {
     console.log("\n=== New Chat Request ===");
@@ -546,6 +525,13 @@ app.post("/api/chat", async (req, res) => {
                     sequence: messageIdInt
                 }
             });
+            const newInCompleteMessage = await prisma.completeMessage.create({
+                data: {
+                    conversationId: conversation.id,
+                    role: 'user',
+                    content: content
+                }
+            })
 
             console.log(`Created new message with sequence ${messageIdInt} for conversation ${conversation.id}`);
         } catch (error) {
@@ -622,16 +608,16 @@ app.post("/api/chat", async (req, res) => {
         let model_1_output_json_string = "";
         model_1_output_json_string = await call_model1(
             input_model_1,
-            "deepseek-chat"
+            "gemini-2.0-flash-exp"
         );
-        model_1_output = JSON.parse(model_1_output_json_string);
+        // model_1_output = JSON.parse(model_1_output_json_string);
 
-        // const cleanedUpdates = model_1_output_json_string
-        //     .split("\n") // Split the input into lines
-        //     .slice(1, -1) // Remove the first and last lines
-        //     .join("\n"); // Join the remaining lines back into a string
-        // console.log("cleanedUpdates", cleanedUpdates);
-        // model_1_output = JSON.parse(cleanedUpdates);
+        const cleanedUpdates = model_1_output_json_string
+            .split("\n") // Split the input into lines
+            .slice(1, -1) // Remove the first and last lines
+            .join("\n"); // Join the remaining lines back into a string
+        console.log("cleanedUpdates", cleanedUpdates);
+        model_1_output = JSON.parse(cleanedUpdates);
         // model_1_output = JSON.parse(cleanedUpdates);
 
 
@@ -1327,6 +1313,10 @@ GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the f
 
         // ANTHROPIC API END
 
+
+
+
+
         // other MODELS
         let completeAssistantMessage = "";
 
@@ -1358,9 +1348,11 @@ GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the f
             id: messageIdInt + 1,
         });
 
+        // other MODELS END
+
         // Add the assistant message to the database
         try {
-            const assistantMessage = await prisma.message.create({
+            const newAssistantMessage = await prisma.message.create({
                 data: {
                     conversationId: conversation.id,
                     role: 'assistant',
@@ -1369,19 +1361,21 @@ GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the f
                 }
             });
 
+            const newInCompleteAssistantMessage = await prisma.completeMessage.create({
+                data: {
+                    conversationId: conversation.id,
+                    role: 'assistant',
+                    content: completeAssistantMessage,
+                }
+            })
+
             console.log(`Created new assistant message with sequence ${messageIdInt + 1} for conversation ${conversation.id}`);
         } catch (error) {
             console.error('Error creating new assistant message:', error);
             throw error;
         }
 
-        // console.log("conversationHistory", conversationHistory);
 
-        console.log("\nCleaning up:");
-        if (fs.existsSync(uploadPath)) {
-            fs.rmSync(uploadPath, { recursive: true });
-            console.log("Uploads directory cleaned");
-        }
 
         const inputTokens = countTokens(content, model);
         const outputTokens = countTokens(completeAssistantMessage, model);
@@ -1424,7 +1418,6 @@ GENERAL_PERSONA: If the """segregation_type""" is """general""", then take the f
 
 });
 
-// other MODELS END
 
 // app.post("/api/code-suggestion", async (req, res) => {
 //     const { filePath, content, line, cursorPosition } = req.body;
