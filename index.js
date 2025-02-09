@@ -209,53 +209,59 @@ MODIFY_PERSONA: If the """segregation_type""" is """modify""", then take the fol
    
         You are an expert code MODIFIER and DEVELOPER. Your task is to provide clear, SPECIFIC code changes based on user requests. You MUST strictly follow every instruction below. If any instruction is unclear or conflicts with a user request, you MUST still adhere to these instructions as the highest priority.
 
+        Here below """file""" refers to the file present in the """relevant_files_names""".
+
+
         ### Guidelines:
-        1. For """code_blocks""":
-          - """code_blocks""" is the code snippet that you will send in the response.
-          - In the """code_blocks""", STRICTLY only show the """modified_code_snippet""" and DON'T show anything from the code file that is not present in the """modified_code_snippet""". FAILURE TO DO THIS WILL RESULT IN CATASTROPHIC ERRORS.
-          - Modifications in the """code_blocks""" MUST be shown in the exact SAME sequence as they appear in the """relevant_files""".
-          - If modifications are to be done in multiple files, then for all the files different """code_blocks""" MUST be generated.
-          - All modifications to a single file MUST be shown in ONE unified """code_blocks""" - no splitting across multiple blocks. FAILURE TO DO THIS WILL RESULT IN UNNECESSARY CONFUSION.
+        1. For """code_block""":
+          - """code_block""" is the code snippet that you will send in the response.
+          - In the """code_block""", STRICTLY only show the """modified_code_snippet""" present in the """changes_array""" and DON'T show unnecessary code from the """file""". FAILURE TO DO THIS WILL RESULT IN CATASTROPHIC ERRORS.
+          - Modifications in the """code_block""" MUST be shown in the exact SAME sequence as they appear in the """file""".
+          - If modifications are to be done in multiple files, then for all the files different """code_block""" MUST be generated.
+          - All """modified_code_snippet""" present in the """changes_array""" of a particular """file""" MUST be shown in ONE unified """code_block""" - no splitting across multiple blocks. FAILURE TO DO THIS WILL RESULT IN UNNECESSARY CONFUSION.
           - Maintain EXACT indentation.
 
         2. For explanations:
           - Be clear and concise.
           - Explain what was changed and why.
-          - If nothing is specified in the """segregated_query""", them give pointwise explanations for each modification.
+          - If nothing is specified in the """segregated_query""", then give pointwise explanations for each modification.
 
         3. For """modifications_array""":
-          - The """modifications_array""" is the array of object of changes corresponding to each file from the """relevant_files""".
+          - The """modifications_array""" is the array of object of changes corresponding to a particular """file""".
           - The """modifications_array""" MUST be a JSON string.
           - If modifications are to be done in multiple files, then for all the files different """modifications_array""" MUST be generated.
           - Place it immediately after the ◉ separator (Unicode U+25C9). While sending chunks in the response, you MUST send the ◉ character as a complete single token. FAILURE TO DO THIS WILL RESULT IN INCORRECT DETECTION OF THE START OF THE """modifications_array""".
           - When the """modifications_array""" is complete, write the ◉ separator again as a complete single token. FAILURE TO DO THIS WILL RESULT IN INCORRECT DETECTION OF THE END OF THE """modifications_array""".
           - No comments or context needed.
 
-        4. For """changes_array""" : 
-          - The """changes_array""" is the array of objects present in the """modifications_array""" that contain the """original_code_snippet""" and """modified_code_snippet""" for each file.
+        4. For """filename""":
+          - The """filename""" MUST be the name of the """file""" for which the modifications are being done.
 
-        5. """original_code_snippet""" :
-          - The """original_code_snippet""" SHOULD be the EXACT code snippet that is present in the """relevant_files""" that needs to be modified.
+        5. For """changes_array""" : 
+          - The """changes_array""" is the array of objects present in the """modifications_array""" that contain the """original_code_snippet""" and """modified_code_snippet""" of a particular """file""".
+
+        6. """original_code_snippet""" :
+          - The """original_code_snippet""" SHOULD be the EXACT code snippet of the """file""" that needs to be modified.
           ### CRITICAL INSTRUCTIONS :
           - The """original_code_snippet""" MUST NEVER be empty. FAILURE TO FOLLOW THIS WILL RESULT IN INCOMPLETE OR INCORRECT MODIFICATIONS.  
-          - If the new code has no direct relation to the existing functionality in """relevant_files""", you MUST STRICTLY treat the new code as an extension or enhancement to the existing functionality. Ensure it integrates seamlessly into the context of the file, rather than being standalone code. FAILURE TO FOLLOW THIS WILL RESULT IN INCORRECT PLACEMENT OF THE NEW CODE.
-          - When adding new code that has no existing counterpart in the """relevant_files""", select a small, STANDALONE, logically COMPLETE block of code from the file as the """original_code_snippet""".
+          - If the new code has no direct relation to the existing functionality in the """file""", you MUST STRICTLY treat the new code as an extension or enhancement to the existing functionality. Ensure it integrates seamlessly into the context of the """file""", rather than being standalone code. FAILURE TO FOLLOW THIS WILL RESULT IN INCORRECT PLACEMENT OF THE NEW CODE.
+          - When adding new code that has no existing counterpart in the """file""", select a small, STANDALONE, logically COMPLETE block of code from the """file""" as the """original_code_snippet""".
           - This block MUST provide proper context and make sense independently, ensuring it aligns with where the new code will appear — either **above**, **below**, or **inside** the selected snippet.
-          - AVOID using arbitrary or incomplete lines; the """original_code_snippeT""" should represent a functional or meaningful unit of code, such as a full statement, function, or block, to maintain clarity and correctness.
-          - It is CRUCIAL that when the """original_code_snippet""" is completely replaced by the """modified_code_snippet""", the new code integrates seamlessly and makes complete sense in the file.  
-          - Give the """original_code_snippet""", while maintaining EXACT formatting, line endings (\r\n or \n), and indentation from the original file.  
+          - AVOID using arbitrary or incomplete lines; the """original_code_snippet""" should represent a functional or meaningful unit of code, such as a full statement, function, or block, to maintain clarity and correctness.
+          - It is CRUCIAL that when the """original_code_snippet""" is completely replaced by the """modified_code_snippet""", the new code integrates seamlessly and makes complete sense in the """file""".  
+          - Give the """original_code_snippet""", while maintaining EXACT formatting, line endings (\r\n or \n), and indentation from the original """file""".  
           - NEVER add any unnecessary "\r\n" or "\n" at the end of the line in the """original_code_snippet""".
 
-        6. """modified_code_snippet""" : 
-          - The """modified_code_snippet""" is the code snippet that is to be added to the """relevant_files""" and is to replace the """original_code_snippet""".
-          - It is CRUCIAL that when the """original_code_snippet""" is completely replaced by the """modified_code_snippet""", the new code integrates seamlessly and makes complete sense in the file.  
-          - Give modifications STRICTLY based on the current code in """relevant_files""". Ignore """conversation_history""" unless needed to ensure completeness, and include any missing elements in the modifications.
+        7. """modified_code_snippet""" : 
+          - The """modified_code_snippet""" is the code snippet that is to be added to the """file""" and is to replace the """original_code_snippet""".
+          - It is CRUCIAL that when the """original_code_snippet""" is completely replaced by the """modified_code_snippet""", the new code integrates seamlessly and makes complete sense in the """file""".   
+          - Give modifications STRICTLY based on the current code in the """file""". Ignore """conversation_history""" unless needed to ensure completeness, and include any missing elements in the modifications.
 
 
 
           CRITICAL RESPONSE INSTRUCTIONS:
-          - The final response must directly start with the """code_blocks""".
-          - there should be no content before the """code_blocks""".
+          - The final response must directly start with the """code_block""".
+          - there should be no content before the """code_block""".
 
         Your response must be in exactly this format:
 
@@ -263,7 +269,7 @@ MODIFY_PERSONA: If the """segregation_type""" is """modify""", then take the fol
         \`\`\`language
         [filename1,"modify"]
 
-        """modified_code_snippet"""
+        // Show ONLY the modified code snippets from changes_array
 
         \`\`\`
 
@@ -757,7 +763,7 @@ app.post("/api/chat", async (req, res) => {
 
         // Add the new user message to the database
         try {
-            // Find the conversation (always make a new query)
+            // Look up the conversation using userId, repositoryName, and iteration
             conversation = await prisma.conversation.findFirst({
                 where: {
                     userId,
@@ -766,25 +772,20 @@ app.post("/api/chat", async (req, res) => {
                 }
             });
 
-            // If conversation not found and iteration is 1, create a new conversation
-            if (!conversation && iterationInt === 1) {
+            // If conversation for this iteration is not found, create a new conversation
+            if (!conversation) {
                 conversation = await prisma.conversation.create({
                     data: {
                         userId,
                         repositoryName,
                         iteration: iterationInt,
-                        iterationName: `Iteration ${iterationInt}`, // You can customize the name
+                        iterationName: `Iteration ${iterationInt}`, // Customize the name if needed
                     }
                 });
                 console.log(`Created new conversation with id ${conversation.id} for iteration ${iterationInt}`);
             }
-
-            if (!conversation) {
-                throw new Error('Conversation not found');
-            }
-
         } catch (error) {
-            console.error('Error creating new message:', error);
+            console.error('Error creating or retrieving conversation:', error);
             throw error;
         }
 
@@ -924,7 +925,7 @@ app.post("/api/chat", async (req, res) => {
             
             You are an expert coding assistant designed to assist developers with modifying, debugging, explaining code, and answering general programming questions. Your role is to analyze incoming tasks, leverage context and history when necessary, and provide precise, actionable, and contextually appropriate responses. You have to adopt the persona based on the """segregation_type""" and generate the response.
       
-      
+            
       
             BACKEND ARCHITECTURE: In the backend of this application, there are two models:
       
@@ -1675,11 +1676,13 @@ Input Object:
     ### Step 1: Context Analysis
           - Analyse the """beforeCursor""" and """afterCursor""" to understand the context of the code and keep in mind the chronology of the code.
           - See what the code is doing and what the user is trying to do.
-          
-          
+          - Analyse if the user is cursor is at the end of the line or not.
+
+
     ### Step 2: [SUGGESTION] generation
     - Consider FULL code context while generating the [SUGGESTION]: """beforeCursor""" + [SUGGESTION] + """afterCursor"""
     - Match EXACT indentation with the code present around the """cursorPosition""" where the [SUGGESTION] is to be inserted.
+    - If the cursor is already at the end of the line, then the [SUGGESTION] should be such that it will start at the next line.
     - Maintain code style of file.
     - Never include markdown or explanations
     - If adding blocks (if/for/etc), COMPLETE THEM IN [SUGGESTION].
@@ -1693,7 +1696,7 @@ Input Object:
     - Indentation matches line property EXACTLY
     - No syntax errors when combined
     - No duplicate code from beforeCursor/afterCursor
-    
+
 
     EXAMPLE VALID OUTPUT:
     Before: "function test() {" //line 1
@@ -1701,7 +1704,7 @@ Input Object:
     cursorPosition: 0
     After: "}" //line 3
     Suggestion: "console.log('test');"
-    
+
     EXAMPLE INVALID OUTPUT:
     Before: "function test() {" // line 1
     cursorLine: // line 2
@@ -1727,6 +1730,8 @@ Input Object:
 
     In the above code since the suggestion is being inserted at line 2, hence it is never possible to close the if statement. In cases like this, you MUST return a suggestion that is itself a complete and syntactically correct code snippet that can be inserted at the cursor position.
 
+
+    CRITICAL RESPONSE INSTRUCTION : If the cursor is already at the end of the line, then the [SUGGESTION] should be such that it will start at the next line.
     YOUR TASK: Generate the MINIMAL code that makes the complete file valid when inserted.`
     };
 
@@ -1773,8 +1778,7 @@ Input Object:
 
         const suggestion = response.choices[0].message.content
             .replace(/```.*/g, '')
-            .trim();
-
+            .trimStart();
         console.log('Cleaned Suggestion:', suggestion);
         console.log('Suggestion Length:', suggestion.length);
 
@@ -1804,8 +1808,183 @@ Input Object:
     }
 });
 
+app.post("/api/query-suggestion", async (req, res) => {
+    console.log('\n=== New Query Suggestion Request ===');
+    const startTime = Date.now();
 
-// Start server
+    try {
+        const {
+            filePath,
+            cursorLine,
+            cursorPosition,
+            currentLineText,
+            visibleText,
+            documentText,
+            documentLanguage,
+            current_input,
+            conversation_history
+        } = req.body;
+
+        // Log request details in a consistent format
+        console.log('Request Details:');
+        console.log(`File: ${filePath}`);
+        console.log(`Language: ${documentLanguage}`);
+        console.log(`Current Input: ${current_input}`);
+        console.log(`Cursor Line: ${cursorLine}`);
+        console.log(`Cursor Position: ${cursorPosition}`);
+        console.log(`Current Line Text: ${currentLineText}`);
+        console.log('Visible Text:', visibleText?.substring(0, 100) + '...');
+        console.log('Document Text:', documentText?.substring(0, 100) + '...');
+        console.log('Conversation History:', conversation_history);
+
+        const input_to_model = {
+            current_input,
+            conversation_history,
+            visibleText,
+            documentText,
+            currentLineText,
+            cursorLine,
+            cursorPosition,
+            filePath,
+            documentLanguage,
+        };
+
+        // Log model input preparation
+        console.log('\n=== Preparing Model Input ===');
+        console.log('Input Structure:', Object.keys(input_to_model));
+        console.log('Current Input Length:', current_input?.length);
+        console.log('History Items:', conversation_history?.length);
+
+        const systemPrompt = {
+            role: "assistant",
+            content: `You are an expert query completor and query rephrasor, similar to Google's search suggestions but specialized for code and development queries. You have to NEVER answer the user's query. You have to ONLY provide the query completions and query rephrasions.
+      
+                                
+        Input Object:
+          {
+            current_input : "user's partial input",
+            conversation_history : "conversation history of the user",
+            visibleText : "the code user is currently seeing in the editor",
+            documentText : "complete text content of the document",
+            currentLineText : "text content of the current line",
+            cursorLine : "line number of the cursor",
+            cursorPosition : "position of the cursor in the line",
+            filePath : "filepath of the file to identify the file extension",
+            documentLanguage : "language of the document",
+        }     
+      
+          
+          Generate query completions by STRICTLY following these steps:
+      
+          NOTE : [SUGGESTION] is the full query that you think the user is trying to type given the context of the code and the """conversation_history""". Your output must be a single query which is a string.
+      
+          ### Step 1: """current_input""" Analysis
+          - First, generate a [SUGGESTION] for """current_input""" assuming that you are Google's search engine.
+          - If you think that the """current_input""" is grammatically or semantically incorrect, then generate a [SUGGESTION] for rephrasing """current_input""".
+      
+          ### Step 2: """conversation_history""" Analysis
+          - Analyse the """conversation_history""" and if you find that the """current_input""" is a continuation or has any relation to the """conversation_history""", then generate a [SUGGESTION] keeping this relation in mind.
+      
+          ### Step 3: """visibleText""","""documentText""", """currentLineText""", """cursorLine""", """cursorPosition""" and """filePath""" Analysis
+          - If you find that the """current_input""" that user has typed has any relation to the """visibleText""","""documentText""", """currentLineText""", """cursorLine""", """cursorPosition""" and """filePath""" then generate a [SUGGESTION] which uses that context of the code and the things that are present in the """visibleText""" or """documentText""".
+      
+          
+      ### CRITICAL INSTRUCTIONS:
+          - NEVER answer the user's query.
+          - The [SUGGESTION] MUST not have any other text or markdown or code or anything else. It MUST be a single query which is a string.
+          - NEVER give a [SUGGESTION] which exceeds 3 lines.
+          - NEVER give a [SUGGESTION] which is already present in the """conversation_history""".
+          - NEVER give a [SUGGESTION] which is grammatically or semantically incorrect.
+          - NEVER give a [SUGGESTION] which is redundant.
+          - NEVER give a [SUGGESTION] which is not related to the """current_input""".
+      
+              `
+        }
+
+        const userPrompt = {
+            role: "user",
+            content: `${JSON.stringify(input_to_model, null, 2)}`
+        }
+        let response = await anthropic.messages.create({
+            model: "claude-3-5-sonnet-20241022",
+            messages: [systemPrompt, userPrompt],
+            max_tokens: 1024,
+            stream: false,
+        });
+        console.log('Raw Response:', response.content[0].text);
+
+        // Process and clean suggestion
+        let suggestion = response.content[0].text
+            .replace(/```.*/g, '')           // Remove code block markers
+            .replace(/^[-\s]+/, '')          // Remove leading dash and whitespace
+            .replace(/\[|\]/g, '')           // Remove square brackets
+            .replace(/SUGGESTION:?\s*/i, '') // Remove "SUGGESTION:" prefix
+            .replace(/^["'`]|["'`]$/g, '')   // Remove quotes around suggestion
+            .trim();
+
+
+        // // Log API call start
+        // console.log('\n=== Calling GPT API ===');
+        // const response = await openai_gpt.chat.completions.create({
+        //     messages: [systemPrompt, userPrompt],
+        //     model: "gpt-4o-mini",
+        //     max_tokens: 36
+        // });
+
+        // console.log('Raw Response:', response.choices[0].message.content);
+
+        // // Process and clean suggestion
+        // let suggestion = response.choices[0].message.content
+        //     .replace(/```.*/g, '')           // Remove code block markers
+        //     .replace(/^[-\s]+/, '')          // Remove leading dash and whitespace
+        //     .replace(/\[|\]/g, '')           // Remove square brackets
+        //     .replace(/SUGGESTION:?\s*/i, '') // Remove "SUGGESTION:" prefix
+        //     .replace(/^["'`]|["'`]$/g, '')   // Remove quotes around suggestion
+        //     .trim();
+
+
+
+        // Log processed suggestion
+        console.log('\n=== Processed Suggestion ===');
+        console.log('Cleaned Suggestion:', suggestion);
+        console.log('Suggestion Length:', suggestion.length);
+
+        // Send successful response
+        console.log('\n=== Request Complete ===');
+        return res.status(200).json({
+            response: [{
+                text: suggestion,
+                detail: "Context-Perfect Suggestion",
+                kind: "inline"
+            }],
+        });
+
+    } catch (error) {
+        // Log error details in consistent format
+        console.error('\n=== Query Suggestion Error ===');
+        console.error('Error Type:', error.name);
+        console.error('Error Message:', error.message);
+        console.error('Stack Trace:', error.stack);
+
+        if (error.response) {
+            console.error('API Response Status:', error.response.status);
+            console.error('API Response Data:', error.response.data);
+        }
+
+        // Send error response with metadata
+        return res.status(500).json({
+            error: "Query suggestion failed",
+            details: error.message,
+            code: error.code || 'UNKNOWN_ERROR',
+            metadata: {
+                latency: Date.now() - startTime,
+                timestamp: new Date().toISOString(),
+                request_id: Math.random().toString(36).substring(7)
+            }
+        });
+    }
+});
+
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
