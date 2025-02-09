@@ -107,7 +107,7 @@ app.use("/api", authenticate); // Apply the authentication middleware to all rou
 app.post('/api/conversation-history', async (req, res) => {
     const userId = req.userId;
     const { repositoryName } = req.query;
-    const { iteration } = req.body; // Get iteration from request body
+    const { iteration } = req.body; // Although iteration is provided, we now return all iterations
     console.log("userId: ", userId);
     console.log("Repository Name: ", repositoryName);
     console.log("Iteration: ", iteration);
@@ -140,58 +140,47 @@ app.post('/api/conversation-history', async (req, res) => {
             return res.status(404).json(conversations);
         }
 
-        // Determine which iteration to fetch messages for
-        const targetIteration = iteration === -1 ? conversations[0].iteration : iteration;
+        // For each conversation, fetch its messages
+        const conversationsWithMessages = await Promise.all(
+            conversations.map(async (conversation) => {
+                const messages = await prisma.message.findMany({
+                    where: {
+                        conversationId: conversation.id,
+                    },
+                    orderBy: {
+                        sequence: 'asc',
+                    },
+                });
 
-        // Find the conversation with the target iteration
-        const selectedConversation = conversations.find(conv => conv.iteration === targetIteration);
-
-        if (!selectedConversation) {
-            return res.status(404).json({ error: 'Specified iteration not found' });
-        }
-
-        // Fetch messages only for the selected iteration
-        const selectedIterationMessages = await prisma.message.findMany({
-            where: {
-                conversationId: selectedConversation.id,
-            },
-            orderBy: {
-                sequence: 'asc',
-            },
-        });
-
-        console.log("Selected Iteration Messages:", selectedIterationMessages);
-
-        // Clean the assistant messages
-        const cleanedMessages = selectedIterationMessages.map(message => {
-            if (message.role === 'assistant') {
-                console.log("Original Assistant Message:", message.content);
-                let cleanedContent = message.content;
-                const separator = "◉";  // Changed from %%%% to ◉
-                const firstSeparatorIndex = cleanedContent.indexOf(separator);
-                if (firstSeparatorIndex !== -1) {
-                    const secondSeparatorIndex = cleanedContent.indexOf(separator, firstSeparatorIndex + separator.length);
-                    if (secondSeparatorIndex !== -1) {
-                        cleanedContent = cleanedContent.substring(0, firstSeparatorIndex) + cleanedContent.substring(secondSeparatorIndex + separator.length);
+                // Clean the assistant messages in each conversation
+                const cleanedMessages = messages.map((message) => {
+                    if (message.role === 'assistant') {
+                        console.log("Original Assistant Message:", message.content);
+                        let cleanedContent = message.content;
+                        const separator = "◉";  // Changed from %%%% to ◉
+                        const firstSeparatorIndex = cleanedContent.indexOf(separator);
+                        if (firstSeparatorIndex !== -1) {
+                            const secondSeparatorIndex = cleanedContent.indexOf(separator, firstSeparatorIndex + separator.length);
+                            if (secondSeparatorIndex !== -1) {
+                                cleanedContent = cleanedContent.substring(0, firstSeparatorIndex) + cleanedContent.substring(secondSeparatorIndex + separator.length);
+                            }
+                        }
+                        console.log("Cleaned Assistant Message:", cleanedContent);
+                        return { ...message, content: cleanedContent };
                     }
-                }
-                console.log("Cleaned Assistant Message:", cleanedContent);
-                return { ...message, content: cleanedContent };
-            }
-            return message;
-        });
+                    return message;
+                });
 
-        console.log("Cleaned Messages:", cleanedMessages);
+                return {
+                    conversationId: conversation.id,
+                    iteration: conversation.iteration,
+                    iterationName: conversation.iterationName,
+                    messages: cleanedMessages,
+                };
+            })
+        );
 
-        // Return the response with messages only for the selected iteration
-        const response = conversations.map((conversation) => ({
-            conversationId: conversation.id,
-            iteration: conversation.iteration,
-            iterationName: conversation.iterationName,
-            messages: conversation.iteration === targetIteration ? cleanedMessages : [], // Include messages only for target iteration
-        }));
-
-        res.json(response);
+        res.json(conversationsWithMessages);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'An error occurred while fetching the conversation history' });
