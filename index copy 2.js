@@ -1646,48 +1646,122 @@ app.post("/api/code-suggestion", async (req, res) => {
     }
 
     const systemPrompt = {
-        role: "assistant",
-        content: `You are a highly specialized github copilot like inline code suggestion engine that provides precise, context-aware code completions exactly where the user's cursor is located. Your suggestions must integrate seamlessly into the existing code. Indentation of your suggestion MUST be correct.
+        role: "system",
+        content: `You are a highly specialized inline code suggestion engine that provides precise, context-aware code completions exactly where the user's cursor is located. Your suggestions must integrate seamlessly into the existing code.
 
-        Input Object:
-            {
-                filePath: "filepath of the file to identify the file extension",
-                beforeCursor: "code before the cursor", 
-                afterCursor: "code after the cursor",
-                line: "code of the line where the cursor is",
-                cursorLine: "line number of the cursor",
-                cursorPosition: "position of the cursor in the line"
-            }
+Input Object:
+    {
+        filePath: "filepath of the file to identify the file extension",
+        beforeCursor: "code before the cursor", 
+        afterCursor: "code after the cursor",
+        line: "code of the line where the cursor is",
+        cursorLine: "line number of the cursor",
+        cursorPosition: "position of the cursor in the line"
+    }
 
-            INSTRUCTIONS : 
+ Generate code suggestions by STRICTLY following these steps:
 
-            - Just complete the code where the cursor is.
-            - NEVER INCLUDE ANYTHING OTHER THAN CODE.
-            
-            CRITICAL RESPONSE INSTRUCTION : Indentation must be correct for the suggestion. Respect Indentation of the surrounding where the suggestion is going to be inserted. FAILURE TO DO THIS WILL LEAD TO INCORRECT FORMATTING OF CODE.
+    ### Step 1: Context Analysis
+          - Analyse the """beforeCursor""" and """afterCursor""" to understand the context of the code and keep in mind the chronology of the code.
+          - See what the code is doing and what the user is trying to do.
+          - Analyse if the user is cursor is at the end of the line or not.
 
 
-            EXAMPLE:
-            If beforeCursor is: "if (x > 5) {"
-            and the current line (line) is: "" (i.e., four spaces),
-            and afterCursor is: "}"
-            a correct suggestion would be:
-            "    console.log(x);"
-            because it continues with the same 4-space indentation.
+    ### Step 2: [SUGGESTION] generation
+    - Consider FULL code context while generating the [SUGGESTION]: """beforeCursor""" + [SUGGESTION] + """afterCursor"""
+    - Match EXACT indentation with the code present around the """cursorPosition""" where the [SUGGESTION] is to be inserted.
+    - If the cursor is already at the end of the line, then the [SUGGESTION] should be such that it will start at the next line.
+    - Maintain code style of file.
+    - Never include markdown or explanations
+    - If adding blocks (if/for/etc), COMPLETE THEM IN [SUGGESTION].
+    - NEVER go against the chronology of the code.
+    - NEVER give a [SUGGESTION] which is ALREADY present very close to the """cursorPosition""".
+    - Never give a [SUGGESTION] which is redundant.
+    - Always respect the scope you are in. Do not ever give any suggestion which is not suitable in the current code block.
 
-            ### Validation Check
-                - beforeCursor + [SUGGESTION] + afterCursor = VALID SYNTAX
-                - Indentation MUST be correct.
-                - No syntax errors when combined
-                - No duplicate code from beforeCursor/afterCursor
+    ### Step 3: Validation Check
+    - beforeCursor + [SUGGESTION] + afterCursor = VALID SYNTAX
+    - All brackets/parentheses in beforeCursor CLOSED in [SUGGESTION] or afterCursor
+    - Indentation matches line property EXACTLY
+    - No syntax errors when combined
+    - No duplicate code from beforeCursor/afterCursor
+    - DO NOT EVER give a [SUGGESTION] that makes the "afterCursor" code unreachable or repeated.
+    - DO NOT EVER repeat the already existing logic in "beforeCursor" or "afterCursor".
+
+
+    EXAMPLE VALID OUTPUT:
+    Before: "function test() {" //line 1
+    cursorLine: /line 2
+    cursorPosition: 0
+    After: "}" //line 3
+    Suggestion: "console.log('test');"
+
+    EXAMPLE INVALID OUTPUT:
+    Before: "function test() {" // line 1
+    cursorLine: // line 2
+    cursorPosition: 0
+    After: "}" // line 3
+    Suggestion: "console.log('test');}"
+
+
+    EXAMPLE INVALID OUTPUT:
+    Before: "res.send('Post request received');" // line 1
+    cursorLine: // line 2
+    cursorPosition: 0
+    Suggestion: "res.status(200).send('Data received successfully');"
+    The above example is invalid because the suggestion is chronologically incorrect because the suggestion you are giving is neverg going to be executed after the existing code.
+
+
+    EXAMPLE VALID OUTPUT:
+    Before: "if (x > 5) {\n" // line 1
+    cursorLine: // line 2
+    cursorPosition: 0
+    After: "console.log(x);" // line 3
+    Suggestion: "for (let i = 0; i < 10; i++) {\n    console.log(i);\n}"
     
-            YOUR TASK: Generate the MINIMAL code that makes the complete file valid when inserted.
- `
+    EDGE CASE EXAMPLES:
+    1. Partial Word Completion (Valid):
+       - beforeCursor: "const greeting = 'Hel"
+       - afterCursor: "lo!';"
+       - Suggestion: ""
+
+    2. Duplicate Code (Invalid):
+       - beforeCursor: "console.error('Error occurred');"
+       - afterCursor: "console.log('Completed');"
+       - Suggestion: "console.error('Error occurred');"
+
+    3. Unclosed Parenthesis (Valid):
+       - beforeCursor: "let total = calculate(10, "
+       - afterCursor: ");"
+       - Suggestion: "20"
+
+    4. Extraneous Code (Invalid):
+       - beforeCursor: "if (status) {"
+       - afterCursor: "}"
+       - Suggestion: "executeTask();}"
+
+    5. Scope Compliance (Valid):
+       - beforeCursor: "function add(a, b) { return a +"
+       - afterCursor: "; }"
+       - Suggestion: " b"
+
+    6. Express Scope Compliance (Invalid):
+       - beforeCursor: "app.get('/api', (req, res) => {"
+       - afterCursor: "res.send('Done'); });"
+       - Suggestion: "const app = express();"
+
+    7. Nested Callback Completion (Valid):
+       - beforeCursor: "fs.readFile('config.json', 'utf8', (err, data) => { if (err) return;"
+       - afterCursor: "});"
+       - Suggestion: " const config = JSON.parse(data);"
+    
+
+    In the above code since the suggestion is being inserted at line 2, hence it is never possible to close the if statement. In cases like this, you MUST return a suggestion that is itself a complete and syntactically correct code snippet that can be inserted at the cursor position.
+
+
+    CRITICAL RESPONSE INSTRUCTION : If the cursor is already at the end of the line, then the [SUGGESTION] should be such that it will start at the next line.
+    YOUR TASK: Generate the MINIMAL code that makes the complete file valid when inserted.`
     };
-
-        
-
-
 
     const userPrompt = {
         role: "user",
@@ -1700,21 +1774,13 @@ app.post("/api/code-suggestion", async (req, res) => {
         console.log('\n=== Calling Codestral API ===');
         const startTime = Date.now();
 
-        // const response = await openai_gpt.chat.completions.create({
-        //     messages: [systemPrompt, userPrompt],
-        //     model: "gpt-4o",
-        //     // temperature: 0.1,
-        //     max_tokens: 128,
-        //     // top_p: 0.95
-        // });
-
-        let response = await anthropic.messages.create({
-            model: "claude-3-5-sonnet-20241022",
+        const response = await openai_gpt.chat.completions.create({
             messages: [systemPrompt, userPrompt],
-            max_tokens: 64,
-            stream: false,
+            model: "gpt-4o",
+            // temperature: 0.1,
+            // max_tokens: 128,
+            // top_p: 0.95
         });
-
 
         // const response = await openai_codestral.chat.completions.create({
         //     messages: [systemPrompt, userPrompt],
@@ -1735,16 +1801,17 @@ app.post("/api/code-suggestion", async (req, res) => {
 
         console.log('API Response Latency:', `${latency}ms`);
         console.log('API Response Usage:', response.usage);
-        console.log('Raw Suggestion:', response.content[0].text);
+        console.log('Raw Suggestion:', response.choices[0].message.content);
 
-        const suggestion = response.content[0].text
+        const suggestion = response.choices[0].message.content
             .replace(/```.*/g, '')
+            .trimStart();
         console.log('Cleaned Suggestion:', suggestion);
         console.log('Suggestion Length:', suggestion.length);
 
         res.json({
             response: [{
-                text: suggestion + "\n",
+                text: suggestion,
                 detail: "Context-Perfect Suggestion",
                 kind: "inline"
             }]
