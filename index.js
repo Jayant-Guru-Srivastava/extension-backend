@@ -533,7 +533,12 @@ CASE 2: If the """user_query""" is empty, then follow the following steps:
 
     ### Step 2: If you found any reason, then generate a """segregated_query_array""" based on that reason but if you did not find any reason, then generate a """segregated_query_array""" with """segregation_type""" as "explain" and """segregated_query""" as "explain the code in the files".
 
+    
+CASE 3: If the """user_query""" is anything similar to queries shown in the """random_queries""" which are not related to programming, then follow the following steps:
 
+    random_queries: ["hi", "hello", "what is the weather in mumbai", "what is the capital of india", "what is the capital of the world", "what is the capital of the moon", "Sdsgvefd"...]
+
+    ### Step 1:Generate a """segregated_query_array""" with """segregation_type""" as "general" and """segregated_query""" as """user_query""".
 
     ### Guidelines
     - Be precise and systematic in your analysis.
