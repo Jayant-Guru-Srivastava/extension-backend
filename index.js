@@ -108,7 +108,6 @@ async function authenticate(req, res, next) {
 
 app.use("/api", authenticate); // Apply the authentication middleware to all routes starting with /api
 
-
 app.post('/api/conversation-history', async (req, res) => {
     const userId = req.userId;
     const { repositoryName } = req.query;
@@ -122,6 +121,9 @@ app.post('/api/conversation-history', async (req, res) => {
     }
 
     try {
+        // Log database connection details
+        console.log("Database URL:", process.env.DATABASE_URL);
+
         // Fetch all iterations of the conversation for the given userId and repositoryName
         const conversations = await prisma.conversation.findMany({
             where: {
@@ -139,15 +141,17 @@ app.post('/api/conversation-history', async (req, res) => {
         });
 
         console.log("Conversations: ", conversations);
-        console.log(conversations.length);
+        console.log("Conversation Count:", conversations.length);
 
         if (conversations.length === 0) {
+            console.log("No conversations found for userId:", userId, "and repositoryName:", repositoryName);
             return res.status(404).json(conversations);
         }
 
         // For each conversation, fetch its messages
         const conversationsWithMessages = await Promise.all(
             conversations.map(async (conversation) => {
+                console.log("Fetching messages for conversationId:", conversation.id);
                 const messages = await prisma.message.findMany({
                     where: {
                         conversationId: conversation.id,
@@ -156,6 +160,8 @@ app.post('/api/conversation-history', async (req, res) => {
                         sequence: 'asc',
                     },
                 });
+
+                console.log("Messages found for conversationId:", conversation.id, "Count:", messages.length);
 
                 // Clean the assistant messages in each conversation
                 const cleanedMessages = messages.map((message) => {
@@ -185,13 +191,13 @@ app.post('/api/conversation-history', async (req, res) => {
             })
         );
 
+        console.log("Final response with messages:", conversationsWithMessages);
         res.json(conversationsWithMessages);
     } catch (error) {
-        console.error(error);
+        console.error("Error in /api/conversation-history:", error);
         res.status(500).json({ error: 'An error occurred while fetching the conversation history' });
     }
 });
-
 
 
 
