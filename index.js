@@ -33,6 +33,11 @@ const openai_gemini = new OpenAI({
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
 });
 
+const openai_openrouter_qwen = new OpenAI({
+    apiKey: process.env.QWEN_OPENROUTER_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
+});
+
 const openai_qwen_huggingface = new OpenAI({
     apiKey: process.env.QWEN_HUGGINGFACE_API_KEY,
     baseURL: "https://api-inference.huggingface.co/v1/",
@@ -533,12 +538,13 @@ CASE 2: If the """user_query""" is empty, then follow the following steps:
 
     ### Step 2: If you found any reason, then generate a """segregated_query_array""" based on that reason but if you did not find any reason, then generate a """segregated_query_array""" with """segregation_type""" as "explain" and """segregated_query""" as "explain the code in the files".
 
-    
 CASE 3: If the """user_query""" is anything similar to queries shown in the """random_queries""" which are not related to programming, then follow the following steps:
 
     random_queries: ["hi", "hello", "what is the weather in mumbai", "what is the capital of india", "what is the capital of the world", "what is the capital of the moon", "Sdsgvefd"...]
 
     ### Step 1:Generate a """segregated_query_array""" with """segregation_type""" as "general" and """segregated_query""" as """user_query""".
+
+
 
     ### Guidelines
     - Be precise and systematic in your analysis.
@@ -645,7 +651,14 @@ CASE 3: If the """user_query""" is anything similar to queries shown in the """r
             case "o1-mini":
                 openai = openai_gpt;
                 break;
-            case "gemini-2.0-flash-exp":
+            case "o3-mini":
+                openai = openai_gpt;
+                break;
+            case "gemini-2.0-flash":
+                openai = openai_gemini;
+                break;
+
+            case "gemini-2.0-pro-exp":
                 openai = openai_gemini;
                 break;
             case "gemini-1.5-flash":
@@ -675,8 +688,8 @@ CASE 3: If the """user_query""" is anything similar to queries shown in the """r
             case "microsoft/phi-3.5-moe-instruct":
                 openai = openai_nvidia;
                 break;
-            case "qwen/qwen2.5-coder-32b-instruct":
-                openai = openai_nvidia;
+            case "qwen/qwen-2.5-coder-32b-instruct":
+                openai = openai_openrouter_qwen;
                 break;
             case "Qwen/Qwen2.5-72B-Instruct":
                 openai = openai_qwen_huggingface;
@@ -892,9 +905,11 @@ app.post("/api/chat", async (req, res) => {
         let model_1_output_json_string = "";
         model_1_output_json_string = await call_model1(
             input_model_1,
-            // "gemini-2.0-flash-exp",
+            // "gemini-2.0-pro-exp",
             "gpt-4o",
-            // "gpt-4o-mini"
+            // "gpt-4o-mini",
+            // "deepseek-chat"
+            // "claude-3-5-sonnet"
 
         );
         model_1_output = JSON.parse(model_1_output_json_string);
@@ -1239,7 +1254,13 @@ app.post("/api/chat", async (req, res) => {
             case "o1-mini":
                 openai = openai_gpt;
                 break;
-            case "gemini-2.0-flash-exp":
+            case "o3-mini":
+                openai = openai_gpt;
+                break;
+            case "gemini-2.0-flash":
+                openai = openai_gemini;
+                break;
+            case "gemini-2.0-pro-exp-02-05":
                 openai = openai_gemini;
                 break;
             case "gemini-1.5-flash":
@@ -1269,8 +1290,8 @@ app.post("/api/chat", async (req, res) => {
             case "microsoft/phi-3.5-moe-instruct":
                 openai = openai_nvidia;
                 break;
-            case "qwen/qwen2.5-coder-32b-instruct":
-                openai = openai_nvidia;
+            case "qwen/qwen-2.5-coder-32b-instruct":
+                openai = openai_openrouter_qwen;
                 break;
             case "Qwen/Qwen2.5-72B-Instruct":
                 openai = openai_qwen_huggingface;
@@ -1450,505 +1471,507 @@ app.post("/api/chat", async (req, res) => {
 
 
 
-app.post('/api/mod_array', async (req, res) => {
-    const { question, fileName, current_content, original_content, original_mod_array } = req.body;
-    console.log("fileName", fileName);
-    console.log("current_content", current_content);
-    console.log("original_content", original_content);
-    console.log("original_mod_array", original_mod_array);
+// app.post('/api/mod_array', async (req, res) => {
+//     const { question, fileName, current_content, original_content, original_mod_array } = req.body;
+//     console.log("fileName", fileName);
+//     console.log("current_content", current_content);
+//     console.log("original_content", original_content);
+//     console.log("original_mod_array", original_mod_array);
 
 
-    let obj_new_modify = {
-        question: question,
-        fileName: fileName,
-        current_content: current_content,
-        original_content: original_content,
-        original_mod_array: original_mod_array
-    }
+//     let obj_new_modify = {
+//         question: question,
+//         fileName: fileName,
+//         current_content: current_content,
+//         original_content: original_content,
+//         original_mod_array: original_mod_array
+//     }
 
-    const systemPrompt = {
-        role: 'assistant',
-        content: `
+//     const systemPrompt = {
+//         role: 'assistant',
+//         content: `
     
-    You are a Code Modification Reconciliation Expert, specialized in analyzing code changes and generating precise modification arrays.
+//     You are a Code Modification Reconciliation Expert, specialized in analyzing code changes and generating precise modification arrays.
   
   
   
-    BACKEND ARCHITECTURE: In the backend of this application, there are two models:
+//     BACKEND ARCHITECTURE: In the backend of this application, there are two models:
   
-    1. MODEL_1: This model has generated the modification array """original_mod_array""" for a given """question""" and the given code file with the given """current_content""" and has sent it to the user.
+//     1. MODEL_1: This model has generated the modification array """original_mod_array""" for a given """question""" and the given code file with the given """current_content""" and has sent it to the user.
     
-   2. MODEL_2: You are MODEL_2.  Your task is as follows : 
-  - The user has modified a code file, and the modified content is provided as """current_content""".  
-  - Your goal is to generate a new modification array called """modifications_array""" to ensure compatibility with the original logic.  
-  - When the changes in """modifications_array""" are applied to """current_content""", the resulting file must reach the same state as if """original_mod_array""" were applied to """original_content""".  
-  - Harmless or non-conflicting changes introduced by the user in "current_content" should not be completely removed.  
-  - Retain user changes that do not conflict with or contradict the intent of """original_mod_array""".  
-  - Remove or adjust changes in """current_content""" only if they are problematic or interfere with the original logic.  
-  - Ensure the final state aligns with the intent of the original modification logic while preserving beneficial, non-conflicting changes.  
+//    2. MODEL_2: You are MODEL_2.  Your task is as follows : 
+//   - The user has modified a code file, and the modified content is provided as """current_content""".  
+//   - Your goal is to generate a new modification array called """modifications_array""" to ensure compatibility with the original logic.  
+//   - When the changes in """modifications_array""" are applied to """current_content""", the resulting file must reach the same state as if """original_mod_array""" were applied to """original_content""".  
+//   - Harmless or non-conflicting changes introduced by the user in "current_content" should not be completely removed.  
+//   - Retain user changes that do not conflict with or contradict the intent of """original_mod_array""".  
+//   - Remove or adjust changes in """current_content""" only if they are problematic or interfere with the original logic.  
+//   - Ensure the final state aligns with the intent of the original modification logic while preserving beneficial, non-conflicting changes.  
   
   
   
-              ### Guidelines:
-              1. For """modifications_array""":
-                - The """modifications_array""" is the array of object of changes corresponding to the file with the given """fileName""" which is to be modified.
-                - The """modifications_array""" MUST be a JSON string.
-                - No comments or context needed.
+//               ### Guidelines:
+//               1. For """modifications_array""":
+//                 - The """modifications_array""" is the array of object of changes corresponding to the file with the given """fileName""" which is to be modified.
+//                 - The """modifications_array""" MUST be a JSON string.
+//                 - No comments or context needed.
       
-              2. For """changes_array""" : 
-                - The """changes_array""" is the array of objects present in the """modifications_array""" that contain the """original_code_snippet""" and """modified_code_snippet""" for the given file.
+//               2. For """changes_array""" : 
+//                 - The """changes_array""" is the array of objects present in the """modifications_array""" that contain the """original_code_snippet""" and """modified_code_snippet""" for the given file.
       
-              3. """original_code_snippet""" :
-                - The """original_code_snippet""" SHOULD be the EXACT code snippet that is present in the """current_content""" that needs to be modified.
-                ### CRITICAL INSTRUCTIONS :
-                - The """original_code_snippet""" MUST NEVER be empty. FAILURE TO FOLLOW THIS WILL RESULT IN INCOMPLETE OR INCORRECT MODIFICATIONS.  
-                - If the new code has no direct relation to the existing functionality in """current_content""", you MUST STRICTLY treat the new code as an extension or enhancement to the existing functionality. Ensure it integrates seamlessly into the context of the file, rather than being standalone code. FAILURE TO FOLLOW THIS WILL RESULT IN INCORRECT PLACEMENT OF THE NEW CODE.
-                - When adding new code that has no existing counterpart in the """current_content""", select a small, STANDALONE, logically COMPLETE block of code from the file as the """original_code_snippet""".
-                - This block MUST provide proper context and make sense independently, ensuring it aligns with where the new code will appear — either **above**, **below**, or **inside** the selected snippet.
-                - AVOID using arbitrary or incomplete lines; the """original_code_snippeT""" should represent a functional or meaningful unit of code, such as a full statement, function, or block, to maintain clarity and correctness.
-                - It is CRUCIAL that when the """original_code_snippet""" is completely replaced by the """modified_code_snippet""", the new code integrates seamlessly and makes complete sense in the file.  
-                - Give the """original_code_snippet""", while maintaining EXACT formatting, line endings (\r\n or \n), and indentation from the original file.  
-                - NEVER add any unnecessary "\r\n" or "\n" at the end of the line in the """original_code_snippet""".
+//               3. """original_code_snippet""" :
+//                 - The """original_code_snippet""" SHOULD be the EXACT code snippet that is present in the """current_content""" that needs to be modified.
+//                 ### CRITICAL INSTRUCTIONS :
+//                 - The """original_code_snippet""" MUST NEVER be empty. FAILURE TO FOLLOW THIS WILL RESULT IN INCOMPLETE OR INCORRECT MODIFICATIONS.  
+//                 - If the new code has no direct relation to the existing functionality in """current_content""", you MUST STRICTLY treat the new code as an extension or enhancement to the existing functionality. Ensure it integrates seamlessly into the context of the file, rather than being standalone code. FAILURE TO FOLLOW THIS WILL RESULT IN INCORRECT PLACEMENT OF THE NEW CODE.
+//                 - When adding new code that has no existing counterpart in the """current_content""", select a small, STANDALONE, logically COMPLETE block of code from the file as the """original_code_snippet""".
+//                 - This block MUST provide proper context and make sense independently, ensuring it aligns with where the new code will appear — either **above**, **below**, or **inside** the selected snippet.
+//                 - AVOID using arbitrary or incomplete lines; the """original_code_snippeT""" should represent a functional or meaningful unit of code, such as a full statement, function, or block, to maintain clarity and correctness.
+//                 - It is CRUCIAL that when the """original_code_snippet""" is completely replaced by the """modified_code_snippet""", the new code integrates seamlessly and makes complete sense in the file.  
+//                 - Give the """original_code_snippet""", while maintaining EXACT formatting, line endings (\r\n or \n), and indentation from the original file.  
+//                 - NEVER add any unnecessary "\r\n" or "\n" at the end of the line in the """original_code_snippet""".
       
-              4. """modified_code_snippet""" : 
-                - The """modified_code_snippet""" is the code snippet that is to be added to the """current_content""" and is to replace the """original_code_snippet""".
-                - It is CRUCIAL that when the """original_code_snippet""" is completely replaced by the """modified_code_snippet""", the new code integrates seamlessly and makes complete sense in the file.  
-                - Give modifications STRICTLY based on the current code in """current_content""". 
-      
-      
-              Your response must be in exactly this format:
+//               4. """modified_code_snippet""" : 
+//                 - The """modified_code_snippet""" is the code snippet that is to be added to the """current_content""" and is to replace the """original_code_snippet""".
+//                 - It is CRUCIAL that when the """original_code_snippet""" is completely replaced by the """modified_code_snippet""", the new code integrates seamlessly and makes complete sense in the file.  
+//                 - Give modifications STRICTLY based on the current code in """current_content""". 
       
       
-              {
-                "modifications_array": [
-                  {
-                    "filename": "filename1",
-                    "changes_array": [
-                      {
-                        "original_code_snippet": "/* Original code snippet from filename1 */",
-                        "modified_code_snippet": "/* Updated or newly added code snippet for filename1 */"
-                      },
-                      {
-                        "original_code_snippet": "/* Another original code snippet from filename1 */",
-                        "modified_code_snippet": "/* Corresponding updated code snippet for filename1 */"
-                      }
-                    ]
-                  }
-                ]
-              }
+//               Your response must be in exactly this format:
+      
+      
+//               {
+//                 "modifications_array": [
+//                   {
+//                     "filename": "filename1",
+//                     "changes_array": [
+//                       {
+//                         "original_code_snippet": "/* Original code snippet from filename1 */",
+//                         "modified_code_snippet": "/* Updated or newly added code snippet for filename1 */"
+//                       },
+//                       {
+//                         "original_code_snippet": "/* Another original code snippet from filename1 */",
+//                         "modified_code_snippet": "/* Corresponding updated code snippet for filename1 */"
+//                       }
+//                     ]
+//                   }
+//                 ]
+//               }
        
       
-              Example response:
+//               Example response:
       
-              {
-                "modifications_array": [
-                {
-                    "filename": "code.js",
-                    "changes_array": [
-                    {
-                        "original_code_snippet": "                // Set sandbox options for the webview\r\n                sandbox: {\r\n                    allowScr: true,\r\n                }\r\n            }\r\n        );",
+//               {
+//                 "modifications_array": [
+//                 {
+//                     "filename": "code.js",
+//                     "changes_array": [
+//                     {
+//                         "original_code_snippet": "                // Set sandbox options for the webview\r\n                sandbox: {\r\n                    allowScr: true,\r\n                }\r\n            }\r\n        );",
       
-                        "modified_code_snippet": "        // Set sandbox options for the webview\r\n        sandbox: {\r\n            allowScripts: false,\r\n        }\r\n    }\r\n);"
-                      },
-                      {
-                        "original_code_snippet": "function handleSubmit(){\r\n    console.log('Submitting form');\r\n    // Some additional logic here\r\n}",
-                        "modified_code_snippet": "function calculateCube(num) {\r\n    return num * num * num;\r\n}\r\nfunction handleSubmit(){\r\n    console.log('Submitting form');\r\n    // Some additional logic here\r\n}"
-                      }
-                    ]
-                  }
-                ]
-              }
+//                         "modified_code_snippet": "        // Set sandbox options for the webview\r\n        sandbox: {\r\n            allowScripts: false,\r\n        }\r\n    }\r\n);"
+//                       },
+//                       {
+//                         "original_code_snippet": "function handleSubmit(){\r\n    console.log('Submitting form');\r\n    // Some additional logic here\r\n}",
+//                         "modified_code_snippet": "function calculateCube(num) {\r\n    return num * num * num;\r\n}\r\nfunction handleSubmit(){\r\n    console.log('Submitting form');\r\n    // Some additional logic here\r\n}"
+//                       }
+//                     ]
+//                   }
+//                 ]
+//               }
   
       
-              YOU MUST - After replacing all the """original_code_snippet""" with the """modified_code_snippet""", there should be NO ERROR in the final code present in the """relevant_files""".
+//               YOU MUST - After replacing all the """original_code_snippet""" with the """modified_code_snippet""", there should be NO ERROR in the final code present in the """relevant_files""".
       
       
   
   
   
-        `
-    };
+//         `
+//     };
 
-    let messagesToSend = [
-        systemPrompt,
-        { role: 'user', content: JSON.stringify(obj_new_modify, null, 2) }  // Send as string instead of array
-    ];
-
-
-    try {
-        // // Make non-streaming API call
-        const response = await anthropic.messages.create({
-            model: "claude-3-5-sonnet-20241022",
-            messages: messagesToSend,
-            max_tokens: 1024,
-            stream: false
-        });
+//     let messagesToSend = [
+//         systemPrompt,
+//         { role: 'user', content: JSON.stringify(obj_new_modify, null, 2) }  // Send as string instead of array
+//     ];
 
 
-        // const extraction = await openai_gpt.chat.completions.create({
-        //   model: "gpt-4o",
-        //   messages: messagesToSend,
-        //   stream: false,
-        // })
-
-        // const extraction = await openai_gemini.chat.completions.create({
-        //   model: "gemini-2.0-flash-exp",
-        //   messages: messagesToSend,
-        //   stream: false,
-        // })
+//     try {
+//         // // Make non-streaming API call
+//         const response = await anthropic.messages.create({
+//             model: "claude-3-5-sonnet-20241022",
+//             messages: messagesToSend,
+//             max_tokens: 1024,
+//             stream: false
+//         });
 
 
-        // const extractedContent = extraction.choices[0].message.content.trim();
+//         // const extraction = await openai_gpt.chat.completions.create({
+//         //   model: "gpt-4o",
+//         //   messages: messagesToSend,
+//         //   stream: false,
+//         // })
 
-        // console.log(extractedContent)
-
-        // Log the complete response
-        console.log('=== Model Response ===');
-        console.log(response.content);
-        console.log('=====================\n');
-
-        // Parse the JSON string from the response
-        // The model's response should be a valid JSON string containing the modifications_array
-        const modificationArrayJson = response.content[0].text;
-        // Log the extracted JSON
-        console.log('=== Extracted Modification Array ===');
-        console.log(modificationArrayJson);
-        console.log('===================================\n');
+//         // const extraction = await openai_gemini.chat.completions.create({
+//         //   model: "gemini-2.0-flash-exp",
+//         //   messages: messagesToSend,
+//         //   stream: false,
+//         // })
 
 
-        // Send only the modification array to frontend
-        res.status(200).json({
-            modifications_array: modificationArrayJson
-        });
+//         // const extractedContent = extraction.choices[0].message.content.trim();
 
-    } catch (error) {
-        console.error('Error in API call:', error);
-        res.status(500).json({
-            error: 'Error generating modification array'
-        });
-    }
+//         // console.log(extractedContent)
 
+//         // Log the complete response
+//         console.log('=== Model Response ===');
+//         console.log(response.content);
+//         console.log('=====================\n');
 
-
-})
-
-app.post("/api/code-suggestion", async (req, res) => {
-    const { filePath, beforeCursor, afterCursor, cursorLine, cursorPosition, line } = req.body;
-
-    console.log('\n=== New Code Suggestion Request ===');
-    console.log(`File: ${filePath}`);
-    console.log(`Line: ${line}`);
-    console.log(`Before cursor`, beforeCursor);
-    console.log(`After cursor`, afterCursor);
-
-    const input_to_model = {
-        filePath: filePath,
-        beforeCursor: beforeCursor,
-        afterCursor: afterCursor,
-        line: line,
-        cursorLine: cursorLine,
-        cursorPosition: cursorPosition
-    }
-
-    const systemPrompt = {
-        role: "assistant",
-        content: `You are a highly specialized github copilot like inline code suggestion engine that provides precise, context-aware code completions exactly where the user's cursor is located. Your suggestions must integrate seamlessly into the existing code. Indentation of your suggestion MUST be correct.
-
-        Input Object:
-            {
-                filePath: "filepath of the file to identify the file extension",
-                beforeCursor: "code before the cursor", 
-                afterCursor: "code after the cursor",
-                line: "code of the line where the cursor is",
-                cursorLine: "line number of the cursor",
-                cursorPosition: "position of the cursor in the line"
-            }
-
-            INSTRUCTIONS : 
-
-            - Just complete the code where the cursor is.
-            - NEVER INCLUDE ANYTHING OTHER THAN CODE.
-            
-            CRITICAL RESPONSE INSTRUCTION : Indentation must be correct for the suggestion. Respect Indentation of the surrounding where the suggestion is going to be inserted. FAILURE TO DO THIS WILL LEAD TO INCORRECT FORMATTING OF CODE.
+//         // Parse the JSON string from the response
+//         // The model's response should be a valid JSON string containing the modifications_array
+//         const modificationArrayJson = response.content[0].text;
+//         // Log the extracted JSON
+//         console.log('=== Extracted Modification Array ===');
+//         console.log(modificationArrayJson);
+//         console.log('===================================\n');
 
 
-            EXAMPLE:
-            If beforeCursor is: "if (x > 5) {"
-            and the current line (line) is: "" (i.e., four spaces),
-            and afterCursor is: "}"
-            a correct suggestion would be:
-            "    console.log(x);"
-            because it continues with the same 4-space indentation.
+//         // Send only the modification array to frontend
+//         res.status(200).json({
+//             modifications_array: modificationArrayJson
+//         });
 
-            ### Validation Check
-                - beforeCursor + [SUGGESTION] + afterCursor = VALID SYNTAX
-                - Indentation MUST be correct.
-                - No syntax errors when combined
-                - No duplicate code from beforeCursor/afterCursor
-    
-            YOUR TASK: Generate the MINIMAL code that makes the complete file valid when inserted.
- `
-    };
-
-        
+//     } catch (error) {
+//         console.error('Error in API call:', error);
+//         res.status(500).json({
+//             error: 'Error generating modification array'
+//         });
+//     }
 
 
 
-    const userPrompt = {
-        role: "user",
-        content: `
-        ${JSON.stringify(input_to_model, null, 2)}
-        `
-    };
+// })
 
-    try {
-        console.log('\n=== Calling Codestral API ===');
-        const startTime = Date.now();
+// app.post("/api/code-suggestion", async (req, res) => {
+//     const { filePath, beforeCursor, afterCursor, cursorLine, cursorPosition, line } = req.body;
 
-        // const response = await openai_gpt.chat.completions.create({
-        //     messages: [systemPrompt, userPrompt],
-        //     model: "gpt-4o",
-        //     // temperature: 0.1,
-        //     max_tokens: 128,
-        //     // top_p: 0.95
-        // });
+//     console.log('\n=== New Code Suggestion Request ===');
+//     console.log(`File: ${filePath}`);
+//     console.log(`Line: ${line}`);
+//     console.log(`Before cursor`, beforeCursor);
+//     console.log(`After cursor`, afterCursor);
 
-        let response = await anthropic.messages.create({
-            model: "claude-3-5-sonnet-20241022",
-            messages: [systemPrompt, userPrompt],
-            max_tokens: 64,
-            stream: false,
-        });
+//     const input_to_model = {
+//         filePath: filePath,
+//         beforeCursor: beforeCursor,
+//         afterCursor: afterCursor,
+//         line: line,
+//         cursorLine: cursorLine,
+//         cursorPosition: cursorPosition
+//     }
 
+//     const systemPrompt = {
+//         role: "assistant",
+//         content: `You are a highly specialized github copilot like inline code suggestion engine that provides precise, context-aware code completions exactly where the user's cursor is located. Your suggestions must integrate seamlessly into the existing code. Indentation of your suggestion MUST be correct.
 
-        // const response = await openai_codestral.chat.completions.create({
-        //     messages: [systemPrompt, userPrompt],
-        //     model: "mistralai/codestral-2501",
-        //     temperature: 0.1,
-        //     max_tokens: 128,
-        //     top_p: 0.95
-        // });
+//         Input Object:
+//             {
+//                 filePath: "filepath of the file to identify the file extension",
+//                 beforeCursor: "code before the cursor", 
+//                 afterCursor: "code after the cursor",
+//                 line: "code of the line where the cursor is",
+//                 cursorLine: "line number of the cursor",
+//                 cursorPosition: "position of the cursor in the line"
+//             }
 
-        // const response = await openai_gpt.chat.completions.create({
-        //     messages: [systemPrompt, userPrompt],
-        //     model: "gpt-4o",
-        //     // temperature: 0.1,
-        //     // max_tokens: 128,
-        //     // top_p: 0.95
-        // });
-        const latency = Date.now() - startTime;
+//             INSTRUCTIONS : 
 
-        console.log('API Response Latency:', `${latency}ms`);
-        console.log('API Response Usage:', response.usage);
-        console.log('Raw Suggestion:', response.content[0].text);
+//             - Just complete the code where the cursor is.
+//             - NEVER INCLUDE ANYTHING OTHER THAN CODE.
 
-        const suggestion = response.content[0].text
-            .replace(/```.*/g, '')
-        console.log('Cleaned Suggestion:', suggestion);
-        console.log('Suggestion Length:', suggestion.length);
-
-        res.json({
-            response: [{
-                text: suggestion + "\n",
-                detail: "Context-Perfect Suggestion",
-                kind: "inline"
-            }]
-        });
-
-    } catch (error) {
-        console.error('\n=== Suggestion Error ===');
-        console.error('Error Type:', error.name);
-        console.error('Error Message:', error.message);
-        if (error.response) {
-            console.error('API Response Status:', error.response.status);
-            console.error('API Response Data:', error.response.data);
-        }
-        console.error('Stack Trace:', error.stack);
-
-        res.status(500).json({
-            error: "Suggestion failed",
-            details: error.message,
-            code: error.code || 'NO_ERROR_CODE'
-        });
-    }
-});
-
-app.post("/api/query-suggestion", async (req, res) => {
-    console.log('\n=== New Query Suggestion Request ===');
-    const startTime = Date.now();
-
-    try {
-        const {
-            filePath,
-            cursorLine,
-            cursorPosition,
-            currentLineText,
-            visibleText,
-            documentText,
-            documentLanguage,
-            current_input,
-            conversation_history
-        } = req.body;
-
-        // Log request details in a consistent format
-        console.log('Request Details:');
-        console.log(`File: ${filePath}`);
-        console.log(`Language: ${documentLanguage}`);
-        console.log(`Current Input: ${current_input}`);
-        console.log(`Cursor Line: ${cursorLine}`);
-        console.log(`Cursor Position: ${cursorPosition}`);
-        console.log(`Current Line Text: ${currentLineText}`);
-        console.log('Visible Text:', visibleText?.substring(0, 100) + '...');
-        console.log('Document Text:', documentText?.substring(0, 100) + '...');
-        console.log('Conversation History:', conversation_history);
-
-        const input_to_model = {
-            current_input,
-            conversation_history,
-            visibleText,
-            documentText,
-            currentLineText,
-            cursorLine,
-            cursorPosition,
-            filePath,
-            documentLanguage,
-        };
-
-        // Log model input preparation
-        console.log('\n=== Preparing Model Input ===');
-        console.log('Input Structure:', Object.keys(input_to_model));
-        console.log('Current Input Length:', current_input?.length);
-        console.log('History Items:', conversation_history?.length);
-
-        const systemPrompt = {
-            role: "assistant",
-            content: `You are an expert query completor and query rephrasor, similar to Google's search suggestions but specialized for code and development queries. You have to NEVER answer the user's query. You have to ONLY provide the query completions and query rephrasions.
-      
-                                
-        Input Object:
-          {
-            current_input : "user's partial input",
-            conversation_history : "conversation history of the user",
-            visibleText : "the code user is currently seeing in the editor",
-            documentText : "complete text content of the document",
-            currentLineText : "text content of the current line",
-            cursorLine : "line number of the cursor",
-            cursorPosition : "position of the cursor in the line",
-            filePath : "filepath of the file to identify the file extension",
-            documentLanguage : "language of the document",
-        }     
-      
-          
-          Generate query completions by STRICTLY following these steps:
-      
-          NOTE : [SUGGESTION] is the full query that you think the user is trying to type given the context of the code and the """conversation_history""". Your output must be a single query which is a string.
-      
-          ### Step 1: """current_input""" Analysis
-          - First, generate a [SUGGESTION] for """current_input""" assuming that you are Google's search engine.
-          - If you think that the """current_input""" is grammatically or semantically incorrect, then generate a [SUGGESTION] for rephrasing """current_input""".
-      
-          ### Step 2: """conversation_history""" Analysis
-          - Analyse the """conversation_history""" and if you find that the """current_input""" is a continuation or has any relation to the """conversation_history""", then generate a [SUGGESTION] keeping this relation in mind.
-      
-          ### Step 3: """visibleText""","""documentText""", """currentLineText""", """cursorLine""", """cursorPosition""" and """filePath""" Analysis
-          - If you find that the """current_input""" that user has typed has any relation to the """visibleText""","""documentText""", """currentLineText""", """cursorLine""", """cursorPosition""" and """filePath""" then generate a [SUGGESTION] which uses that context of the code and the things that are present in the """visibleText""" or """documentText""".
-      
-          
-      ### CRITICAL INSTRUCTIONS:
-          - NEVER answer the user's query.
-          - The [SUGGESTION] MUST not have any other text or markdown or code or anything else. It MUST be a single query which is a string.
-          - NEVER give a [SUGGESTION] which exceeds 3 lines.
-          - NEVER give a [SUGGESTION] which is already present in the """conversation_history""".
-          - NEVER give a [SUGGESTION] which is grammatically or semantically incorrect.
-          - NEVER give a [SUGGESTION] which is redundant.
-          - NEVER give a [SUGGESTION] which is not related to the """current_input""".
-      
-              `
-        }
-
-        const userPrompt = {
-            role: "user",
-            content: `${JSON.stringify(input_to_model, null, 2)}`
-        }
-        let response = await anthropic.messages.create({
-            model: "claude-3-5-sonnet-20241022",
-            messages: [systemPrompt, userPrompt],
-            max_tokens: 1024,
-            stream: false,
-        });
-        console.log('Raw Response:', response.content[0].text);
-
-        // Process and clean suggestion
-        let suggestion = response.content[0].text
-            .replace(/```.*/g, '')           // Remove code block markers
-            .replace(/^[-\s]+/, '')          // Remove leading dash and whitespace
-            .replace(/\[|\]/g, '')           // Remove square brackets
-            .replace(/SUGGESTION:?\s*/i, '') // Remove "SUGGESTION:" prefix
-            .replace(/^["'`]|["'`]$/g, '')   // Remove quotes around suggestion
-            .trim();
+//             CRITICAL RESPONSE INSTRUCTION : Indentation must be correct for the suggestion. Respect Indentation of the surrounding where the suggestion is going to be inserted. FAILURE TO DO THIS WILL LEAD TO INCORRECT FORMATTING OF CODE.
 
 
-        // // Log API call start
-        // console.log('\n=== Calling GPT API ===');
-        // const response = await openai_gpt.chat.completions.create({
-        //     messages: [systemPrompt, userPrompt],
-        //     model: "gpt-4o-mini",
-        //     max_tokens: 36
-        // });
+//             EXAMPLE:
+//             If beforeCursor is: "if (x > 5) {"
+//             and the current line (line) is: "" (i.e., four spaces),
+//             and afterCursor is: "}"
+//             a correct suggestion would be:
+//             "    console.log(x);"
+//             because it continues with the same 4-space indentation.
 
-        // console.log('Raw Response:', response.choices[0].message.content);
+//             ### Validation Check
+//                 - beforeCursor + [SUGGESTION] + afterCursor = VALID SYNTAX
+//                 - Indentation MUST be correct.
+//                 - No syntax errors when combined
+//                 - No duplicate code from beforeCursor/afterCursor
 
-        // // Process and clean suggestion
-        // let suggestion = response.choices[0].message.content
-        //     .replace(/```.*/g, '')           // Remove code block markers
-        //     .replace(/^[-\s]+/, '')          // Remove leading dash and whitespace
-        //     .replace(/\[|\]/g, '')           // Remove square brackets
-        //     .replace(/SUGGESTION:?\s*/i, '') // Remove "SUGGESTION:" prefix
-        //     .replace(/^["'`]|["'`]$/g, '')   // Remove quotes around suggestion
-        //     .trim();
+//             YOUR TASK: Generate the MINIMAL code that makes the complete file valid when inserted.
+//  `
+//     };
 
 
 
-        // Log processed suggestion
-        console.log('\n=== Processed Suggestion ===');
-        console.log('Cleaned Suggestion:', suggestion);
-        console.log('Suggestion Length:', suggestion.length);
 
-        // Send successful response
-        console.log('\n=== Request Complete ===');
-        return res.status(200).json({
-            response: [{
-                text: suggestion,
-                detail: "Context-Perfect Suggestion",
-                kind: "inline"
-            }],
-        });
 
-    } catch (error) {
-        // Log error details in consistent format
-        console.error('\n=== Query Suggestion Error ===');
-        console.error('Error Type:', error.name);
-        console.error('Error Message:', error.message);
-        console.error('Stack Trace:', error.stack);
+//     const userPrompt = {
+//         role: "user",
+//         content: `
+//         ${JSON.stringify(input_to_model, null, 2)}
+//         `
+//     };
 
-        if (error.response) {
-            console.error('API Response Status:', error.response.status);
-            console.error('API Response Data:', error.response.data);
-        }
+//     try {
+//         console.log('\n=== Calling Codestral API ===');
+//         const startTime = Date.now();
 
-        // Send error response with metadata
-        return res.status(500).json({
-            error: "Query suggestion failed",
-            details: error.message,
-            code: error.code || 'UNKNOWN_ERROR',
-            metadata: {
-                latency: Date.now() - startTime,
-                timestamp: new Date().toISOString(),
-                request_id: Math.random().toString(36).substring(7)
-            }
-        });
-    }
-});
+//         // const response = await openai_gpt.chat.completions.create({
+//         //     messages: [systemPrompt, userPrompt],
+//         //     model: "gpt-4o",
+//         //     // temperature: 0.1,
+//         //     max_tokens: 128,
+//         //     // top_p: 0.95
+//         // });
+
+//         let response = await anthropic.messages.create({
+//             model: "claude-3-5-sonnet-20241022",
+//             messages: [systemPrompt, userPrompt],
+//             max_tokens: 64,
+//             stream: false,
+//         });
+
+
+//         // const response = await openai_codestral.chat.completions.create({
+//         //     messages: [systemPrompt, userPrompt],
+//         //     model: "mistralai/codestral-2501",
+//         //     temperature: 0.1,
+//         //     max_tokens: 128,
+//         //     top_p: 0.95
+//         // });
+
+//         // const response = await openai_gpt.chat.completions.create({
+//         //     messages: [systemPrompt, userPrompt],
+//         //     model: "gpt-4o",
+//         //     // temperature: 0.1,
+//         //     // max_tokens: 128,
+//         //     // top_p: 0.95
+//         // });
+//         const latency = Date.now() - startTime;
+
+//         console.log('API Response Latency:', `${latency}ms`);
+//         console.log('API Response Usage:', response.usage);
+//         console.log('Raw Suggestion:', response.content[0].text);
+
+//         const suggestion = response.content[0].text
+//             .replace(/```.*/g, '')
+//         console.log('Cleaned Suggestion:', suggestion);
+//         console.log('Suggestion Length:', suggestion.length);
+
+//         res.json({
+//             response: [{
+//                 text: suggestion + "\n",
+//                 detail: "Context-Perfect Suggestion",
+//                 kind: "inline"
+//             }]
+//         });
+
+//     } catch (error) {
+//         console.error('\n=== Suggestion Error ===');
+//         console.error('Error Type:', error.name);
+//         console.error('Error Message:', error.message);
+//         if (error.response) {
+//             console.error('API Response Status:', error.response.status);
+//             console.error('API Response Data:', error.response.data);
+//         }
+//         console.error('Stack Trace:', error.stack);
+
+//         res.status(500).json({
+//             error: "Suggestion failed",
+//             details: error.message,
+//             code: error.code || 'NO_ERROR_CODE'
+//         });
+//     }
+// });
+
+// app.post("/api/query-suggestion", async (req, res) => {
+//     console.log('\n=== New Query Suggestion Request ===');
+//     const startTime = Date.now();
+
+//     try {
+//         const {
+//             filePath,
+//             cursorLine,
+//             cursorPosition,
+//             currentLineText,
+//             visibleText,
+//             documentText,
+//             documentLanguage,
+//             current_input,
+//             conversation_history
+//         } = req.body;
+
+//         // Log request details in a consistent format
+//         console.log('Request Details:');
+//         console.log(`File: ${filePath}`);
+//         console.log(`Language: ${documentLanguage}`);
+//         console.log(`Current Input: ${current_input}`);
+//         console.log(`Cursor Line: ${cursorLine}`);
+//         console.log(`Cursor Position: ${cursorPosition}`);
+//         console.log(`Current Line Text: ${currentLineText}`);
+//         console.log('Visible Text:', visibleText?.substring(0, 100) + '...');
+//         console.log('Document Text:', documentText?.substring(0, 100) + '...');
+//         console.log('Conversation History:', conversation_history);
+
+//         const input_to_model = {
+//             current_input,
+//             conversation_history,
+//             visibleText,
+//             documentText,
+//             currentLineText,
+//             cursorLine,
+//             cursorPosition,
+//             filePath,
+//             documentLanguage,
+//         };
+
+//         // Log model input preparation
+//         console.log('\n=== Preparing Model Input ===');
+//         console.log('Input Structure:', Object.keys(input_to_model));
+//         console.log('Current Input Length:', current_input?.length);
+//         console.log('History Items:', conversation_history?.length);
+
+//         const systemPrompt = {
+//             role: "assistant",
+//             content: `You are an expert query completor and query rephrasor, similar to Google's search suggestions but specialized for code and development queries. You have to NEVER answer the user's query. You have to ONLY provide the query completions and query rephrasions.
+
+
+//         Input Object:
+//           {
+//             current_input : "user's partial input",
+//             conversation_history : "conversation history of the user",
+//             visibleText : "the code user is currently seeing in the editor",
+//             documentText : "complete text content of the document",
+//             currentLineText : "text content of the current line",
+//             cursorLine : "line number of the cursor",
+//             cursorPosition : "position of the cursor in the line",
+//             filePath : "filepath of the file to identify the file extension",
+//             documentLanguage : "language of the document",
+//         }     
+
+
+//           Generate query completions by STRICTLY following these steps:
+
+//           NOTE : [SUGGESTION] is the full query that you think the user is trying to type given the context of the code and the """conversation_history""". Your output must be a single query which is a string.
+
+//           ### Step 1: """current_input""" Analysis
+//           - First, generate a [SUGGESTION] for """current_input""" assuming that you are Google's search engine.
+//           - If you think that the """current_input""" is grammatically or semantically incorrect, then generate a [SUGGESTION] for rephrasing """current_input""".
+
+//           ### Step 2: """conversation_history""" Analysis
+//           - Analyse the """conversation_history""" and if you find that the """current_input""" is a continuation or has any relation to the """conversation_history""", then generate a [SUGGESTION] keeping this relation in mind.
+
+//           ### Step 3: """visibleText""","""documentText""", """currentLineText""", """cursorLine""", """cursorPosition""" and """filePath""" Analysis
+//           - If you find that the """current_input""" that user has typed has any relation to the """visibleText""","""documentText""", """currentLineText""", """cursorLine""", """cursorPosition""" and """filePath""" then generate a [SUGGESTION] which uses that context of the code and the things that are present in the """visibleText""" or """documentText""".
+
+
+//       ### CRITICAL INSTRUCTIONS:
+//           - NEVER answer the user's query.
+//           - The [SUGGESTION] MUST not have any other text or markdown or code or anything else. It MUST be a single query which is a string.
+//           - NEVER give a [SUGGESTION] which exceeds 3 lines.
+//           - NEVER give a [SUGGESTION] which is already present in the """conversation_history""".
+//           - NEVER give a [SUGGESTION] which is grammatically or semantically incorrect.
+//           - NEVER give a [SUGGESTION] which is redundant.
+//           - NEVER give a [SUGGESTION] which is not related to the """current_input""".
+
+//               `
+//         }
+
+//         const userPrompt = {
+//             role: "user",
+//             content: `${JSON.stringify(input_to_model, null, 2)}`
+//         }
+
+
+//         let response = await anthropic.messages.create({
+//             model: "claude-3-5-sonnet-20241022",
+//             messages: [systemPrompt, userPrompt],
+//             max_tokens: 1024,
+//             stream: false,
+//         });
+//         console.log('Raw Response:', response.content[0].text);
+
+//         // Process and clean suggestion
+//         let suggestion = response.content[0].text
+//             .replace(/```.*/g, '')           // Remove code block markers
+//             .replace(/^[-\s]+/, '')          // Remove leading dash and whitespace
+//             .replace(/\[|\]/g, '')           // Remove square brackets
+//             .replace(/SUGGESTION:?\s*/i, '') // Remove "SUGGESTION:" prefix
+//             .replace(/^["'`]|["'`]$/g, '')   // Remove quotes around suggestion
+//             .trim();
+
+
+//         // // Log API call start
+//         // console.log('\n=== Calling GPT API ===');
+//         // const response = await openai_gpt.chat.completions.create({
+//         //     messages: [systemPrompt, userPrompt],
+//         //     model: "gpt-4o-mini",
+//         //     max_tokens: 36
+//         // });
+
+//         // console.log('Raw Response:', response.choices[0].message.content);
+
+//         // Process and clean suggestion
+//         // let suggestion = response.choices[0].message.content
+//         //     .replace(/```.*/g, '')           // Remove code block markers
+//         //     .replace(/^[-\s]+/, '')          // Remove leading dash and whitespace
+//         //     .replace(/\[|\]/g, '')           // Remove square brackets
+//         //     .replace(/SUGGESTION:?\s*/i, '') // Remove "SUGGESTION:" prefix
+//         //     .replace(/^["'`]|["'`]$/g, '')   // Remove quotes around suggestion
+//         //     .trim();
+
+
+
+//         // Log processed suggestion
+//         console.log('\n=== Processed Suggestion ===');
+//         console.log('Cleaned Suggestion:', suggestion);
+//         console.log('Suggestion Length:', suggestion.length);
+
+//         // Send successful response
+//         console.log('\n=== Request Complete ===');
+//         return res.status(200).json({
+//             response: [{
+//                 text: suggestion,
+//                 detail: "Context-Perfect Suggestion",
+//                 kind: "inline"
+//             }],
+//         });
+
+//     } catch (error) {
+//         // Log error details in consistent format
+//         console.error('\n=== Query Suggestion Error ===');
+//         console.error('Error Type:', error.name);
+//         console.error('Error Message:', error.message);
+//         console.error('Stack Trace:', error.stack);
+
+//         if (error.response) {
+//             console.error('API Response Status:', error.response.status);
+//             console.error('API Response Data:', error.response.data);
+//         }
+
+//         // Send error response with metadata
+//         return res.status(500).json({
+//             error: "Query suggestion failed",
+//             details: error.message,
+//             code: error.code || 'UNKNOWN_ERROR',
+//             metadata: {
+//                 latency: Date.now() - startTime,
+//                 timestamp: new Date().toISOString(),
+//                 request_id: Math.random().toString(36).substring(7)
+//             }
+//         });
+//     }
+// });
 
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
